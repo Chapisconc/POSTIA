@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import type { Order } from '@/lib/orders/orders'
 import type { OrderStatus } from '@/lib/config/service'
 
@@ -57,16 +56,8 @@ export function OrdersClientView({ orders, statuses }: OrdersClientViewProps) {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 p-8 text-white">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Pedidos</h1>
-            <Link href="/dashboard" className="text-sm text-blue-400 hover:underline">
-              ← Volver al dashboard
-            </Link>
-          </div>
-        </header>
+    <div className="mx-auto max-w-5xl">
+      <h1 className="mb-6 text-3xl font-bold">Pedidos</h1>
 
         {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
 
@@ -126,7 +117,6 @@ export function OrdersClientView({ orders, statuses }: OrdersClientViewProps) {
             })}
           </ul>
         )}
-      </div>
-    </main>
+    </div>
   )
 }

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import type { OrderItem, Order } from '@/lib/orders/orders'
 import type { Product } from '@/lib/products/products'
-import type { OrderType, OrderStatus, PaymentMethod, OrgSettings } from '@/lib/config/service'
+import type { OrderType, PaymentMethod, OrgSettings } from '@/lib/config/service'
 
 function formatPrice(value: number): string {
   return value.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -16,7 +16,6 @@ function round2(value: number): number {
 interface PosClientProps {
   products: Product[]
   orderTypes: OrderType[]
-  orderStatuses: OrderStatus[]
   paymentMethods: PaymentMethod[]
   settings: OrgSettings
 }
@@ -24,7 +23,6 @@ interface PosClientProps {
 export function PosClient({
   products,
   orderTypes,
-  orderStatuses,
   paymentMethods,
   settings,
 }: PosClientProps) {
@@ -125,15 +123,10 @@ export function PosClient({
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 p-6 text-white">
-      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[1fr_380px]">
+    <div className="mx-auto max-w-7xl">
+      <h1 className="mb-6 text-3xl font-bold">Punto de venta</h1>
+      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div>
-          <header className="mb-6 flex items-center justify-between">
-            <h1 className="text-3xl font-bold">Punto de venta</h1>
-            <span className="text-sm text-slate-400">
-              {orderStatuses[0]?.label ?? 'Estado inicial'}
-            </span>
-          </header>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {products.map((product) => (
@@ -305,6 +298,6 @@ export function PosClient({
           </div>
         </div>
       )}
-    </main>
+    </div>
   )
 }

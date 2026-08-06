@@ -15,7 +15,7 @@ test('registrar clientes desde el catálogo y consultarlos por API', async ({ pa
   await page.getByRole('button', { name: /crear negocio/i }).click()
   await page.waitForURL(/\/dashboard/)
 
-  await page.getByRole('link', { name: /clientes/i }).click()
+  await page.getByRole('link', { name: 'Clientes', exact: true }).first().click()
   await page.waitForURL(/\/dashboard\/clientes/)
 
   await page.getByLabel('Nombre').fill('María López')

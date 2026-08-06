@@ -4,7 +4,6 @@ import { requireOrgId } from '@/lib/api/require-org'
 import { listProducts } from '@/lib/products/products'
 import {
   getOrderTypes,
-  getOrderStatuses,
   getPaymentMethods,
   getOrgSettings,
 } from '@/lib/config/service'
@@ -29,10 +28,9 @@ export default async function PosPage() {
     return null
   }
 
-  const [products, orderTypes, orderStatuses, paymentMethods, settings] = await Promise.all([
+  const [products, orderTypes, paymentMethods, settings] = await Promise.all([
     listProducts(client as unknown as ProductsClient, orgId),
     getOrderTypes(orgId, client as unknown as ConfigClient),
-    getOrderStatuses(orgId, client as unknown as ConfigClient),
     getPaymentMethods(orgId, client as unknown as ConfigClient),
     getOrgSettings(orgId, client as unknown as ConfigClient),
   ])
@@ -41,7 +39,6 @@ export default async function PosPage() {
     <PosClient
       products={products}
       orderTypes={orderTypes}
-      orderStatuses={orderStatuses}
       paymentMethods={paymentMethods}
       settings={settings}
     />
