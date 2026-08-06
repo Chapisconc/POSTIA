@@ -93,3 +93,27 @@ Toda la navegación autenticada vive en un shell con sidebar (`src/app/(app)`).
   este proyecto.
 - Para apuntar la app al remoto, cambia las variables en `.env.local` (URL del
   proyecto + anon key).
+
+## Despliegue en Vercel
+
+El proyecto es Next.js estándar: se despliega en Vercel importando el repo de
+GitHub. La base remota ya está migrada.
+
+1. Sube el repo a GitHub y conéctalo en Vercel (`vercel.com/new`, importar repo).
+2. Configura estas variables de entorno en el proyecto de Vercel (Settings →
+   Environment Variables):
+
+   | Variable | Valor | Secreto |
+   | --- | --- | --- |
+   | `NEXT_PUBLIC_SUPABASE_URL` | `https://anruvmeypudkrdvymsns.supabase.co` | No |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ver `.env.local.example` | No |
+   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | ver `.env.local.example` | No |
+   | `SUPABASE_SERVICE_ROLE_KEY` | consola de Supabase → API Keys (no commitear) | Sí |
+
+3. Las rutas autenticadas son dinámicas (server-rendered); no requieren prerender
+   en build. Verifica localmente con `npm run build` usando `.env.production`
+   (archivo gitignored con los valores del remoto).
+4. Crea la primera cuenta con `/register` y completa el onboarding (`/onboarding`).
+
+Nota: `SUPABASE_SERVICE_ROLE_KEY` permite operaciones administrativas; solo
+configúrala en Vercel, nunca en código.
