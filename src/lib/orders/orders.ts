@@ -1,4 +1,4 @@
-import { getInitialStatusId, getOrderStatuses, type OrgSettings } from '@/lib/config/service'
+import { getInitialStatusId, getOrderStatuses, type OrderStatus, type OrgSettings } from '@/lib/config/service'
 
 export interface OrderItem {
   product_id: number
@@ -93,6 +93,33 @@ export async function createOrder(
       total,
       notes: input.notes ?? null,
     })
+    .select()
+
+  if (error) throw error
+  return ((data as Order[] | null)?.[0] ?? null) as Order
+}
+
+export async function getNextOrderStatus(
+  client: OrdersClient,
+  orgId: string,
+  currentStatusId: number,
+): Promise<OrderStatus | null> {
+  const statuses = await getOrderStatuses(orgId, client as never)
+  const currentIndex = statuses.findIndex((s) => s.id === currentStatusId)
+  if (currentIndex === -1) return null
+  return statuses[currentIndex + 1] ?? null
+}
+
+export async function updateOrderStatus(
+  client: OrdersClient,
+  orgId: string,
+  orderId: number,
+  statusId: number,
+): Promise<Order> {
+  const { data, error } = await client
+    .from('orders')
+    .update({ status_id: statusId })
+    .eq('id', orderId)
     .select()
 
   if (error) throw error

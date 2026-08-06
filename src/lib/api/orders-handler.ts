@@ -1,4 +1,4 @@
-import { createOrder, listOrders, chargeOrder, type OrderItem } from '@/lib/orders/orders'
+import { createOrder, listOrders, chargeOrder, updateOrderStatus, type OrderItem } from '@/lib/orders/orders'
 import { getOrgSettings } from '@/lib/config/service'
 import type { ConfigClient } from '@/lib/config/service'
 
@@ -85,5 +85,32 @@ export async function handleChargeOrderRequest(
   } catch (error) {
     console.error('orders-handler (PATCH):', error)
     return Response.json({ error: 'No se pudo cobrar el pedido' }, { status: 500 })
+  }
+}
+
+export async function handleUpdateOrderStatusRequest(
+  orgId: string,
+  client: ConfigClient,
+  orderId: number,
+  request: Request,
+) {
+  let body: { status_id?: number }
+
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Body JSON inválido' }, { status: 400 })
+  }
+
+  if (typeof body.status_id !== 'number') {
+    return Response.json({ error: 'Se requiere el estado' }, { status: 400 })
+  }
+
+  try {
+    const order = await updateOrderStatus(client as never, orgId, orderId, body.status_id)
+    return Response.json(order, { status: 200 })
+  } catch (error) {
+    console.error('orders-handler (PATCH status):', error)
+    return Response.json({ error: 'No se pudo actualizar el estado' }, { status: 500 })
   }
 }

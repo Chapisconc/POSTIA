@@ -13,6 +13,15 @@ function okClient(): ConfigClient {
           }),
         }
       }
+      if (name === 'order_types' || name === 'order_statuses' || name === 'payment_methods') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: [{ id: 1, key: 'x', label: 'X', position: 0 }], error: null }),
+            }),
+          }),
+        }
+      }
       return {
         select: () => ({
           eq: () => ({
@@ -26,11 +35,18 @@ function okClient(): ConfigClient {
 
 function errClient(): ConfigClient {
   return {
-    from: () => ({
-      select: () => ({
-        eq: () => ({ data: null, error: new Error('db down') }),
-      }),
-    }),
+    from: (name: string) => {
+      if (name === 'org_modules') {
+        return { select: () => ({ eq: () => ({ data: null, error: new Error('db down') }) }) }
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            order: () => Promise.resolve({ data: null, error: new Error('db down') }),
+          }),
+        }),
+      }
+    },
   } as unknown as ConfigClient
 }
 
@@ -49,6 +65,11 @@ describe('handler de configuración (API)', () => {
       from: (name: string) => {
         if (name === 'org_modules') {
           return { select: () => ({ eq: () => ({ data: [], error: null }) }) }
+        }
+        if (name === 'order_types' || name === 'order_statuses' || name === 'payment_methods') {
+          return {
+            select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }),
+          }
         }
         return {
           select: () => ({ eq: () => ({ single: () => ({ data: null, error: null }) }) }),

@@ -3,7 +3,9 @@ import {
   calculateTotals,
   chargeOrder,
   createOrder,
+  getNextOrderStatus,
   listOrders,
+  updateOrderStatus,
   type OrderItem,
   type Order,
 } from './orders'
@@ -214,6 +216,61 @@ describe('chargeOrder', () => {
     })
 
     await expect(chargeOrder(client as never, 'org-1', 7, 2)).rejects.toThrow('update failed')
+  })
+})
+
+describe('getNextOrderStatus', () => {
+  it('devuelve el estado que sigue en posición', async () => {
+    const client = ordersClient({
+      statuses: () => ({
+        data: [
+          { id: 1, key: 'nuevo', label: 'Nuevo', position: 0, notify_kitchen: true },
+          { id: 2, key: 'preparando', label: 'Preparando', position: 1, notify_kitchen: true },
+          { id: 3, key: 'listo', label: 'Listo', position: 2 },
+        ],
+      }),
+    })
+
+    const next = await getNextOrderStatus(client as never, 'org-1', 1)
+    expect(next?.id).toBe(2)
+  })
+
+  it('devuelve null en el último estado', async () => {
+    const client = ordersClient({
+      statuses: () => ({
+        data: [{ id: 4, key: 'pagado', label: 'Pagado', position: 4, permite_cobro: true }],
+      }),
+    })
+
+    expect(await getNextOrderStatus(client as never, 'org-1', 4)).toBeNull()
+  })
+
+  it('devuelve null si el estado actual no existe', async () => {
+    const client = ordersClient({ statuses: () => ({ data: [{ id: 1, key: 'nuevo', label: 'Nuevo', position: 0 }] }) })
+
+    expect(await getNextOrderStatus(client as never, 'org-1', 99)).toBeNull()
+  })
+})
+
+describe('updateOrderStatus', () => {
+  it('actualiza el estado del pedido', async () => {
+    const updates: Row[] = []
+    const client = ordersClient({
+      update: (row: Row) => {
+        updates.push(row)
+        return { data: [{ id: 7, status_id: row.status_id }], error: null }
+      },
+    })
+
+    const order = await updateOrderStatus(client as never, 'org-1', 7, 2)
+    expect(order.status_id).toBe(2)
+    expect(updates[0]).toMatchObject({ status_id: 2 })
+  })
+
+  it('propaga errores de la BD', async () => {
+    const client = ordersClient({ update: () => ({ error: new Error('update failed') }) })
+
+    await expect(updateOrderStatus(client as never, 'org-1', 7, 2)).rejects.toThrow('update failed')
   })
 })
 
