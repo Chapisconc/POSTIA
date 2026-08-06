@@ -1,27 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildOrgConfig, getOrgModules, getOrgSettings, resolveConfig } from './service'
+import type { ConfigClient, QueryResult, SelectChain } from './service'
 import { MODULES } from './catalog'
 import type { OrgConfig, OrgSettings } from './service'
 
-type QueryResult = { data: unknown; error: unknown }
-
-type ChainResult = QueryResult & { single?: () => Promise<QueryResult> }
-
 type Handler = () => {
   select: () => {
-    eq: () => ChainResult
+    eq: () => SelectChain
   }
 }
 
-function mockClient(handlers?: Record<string, Handler>) {
+function mockClient(handlers?: Record<string, Handler>): { client: ConfigClient; from: ReturnType<typeof vi.fn> } {
   const from = vi.fn()
-  const client = { from } as {
-    from: (table: string) => {
-      select: () => {
-        eq: () => ChainResult
-      }
-    }
-  }
+  const client = { from } as unknown as ConfigClient
 
   from.mockImplementation((name: string) => {
     if (handlers?.[name]) return handlers[name]()
@@ -32,10 +23,14 @@ function mockClient(handlers?: Record<string, Handler>) {
   return { client, from }
 }
 
-function chainEq(result: ChainResult) {
+function chainEq(result: Partial<QueryResult> & { single?: () => Promise<QueryResult> }) {
   return {
     select: () => ({
-      eq: () => result,
+      eq: () => ({
+        data: result.data ?? null,
+        error: result.error ?? null,
+        single: result.single ?? (() => Promise.resolve({ data: null, error: null })),
+      }),
     }),
   }
 }
@@ -70,6 +65,21 @@ describe('servicio de configuración por organización', () => {
 
     const settings = await getOrgSettings('org-1', client)
     expect(settings).toHaveProperty('moneda', 'MXN')
+  })
+
+  it('getOrgSettings devuelve defaults cuando la org no tiene fila (PGRST116)', async () => {
+    const { client } = mockClient({
+      org_settings: () =>
+        chainEq({
+          single: vi.fn().mockReturnValue({
+            data: null,
+            error: { code: 'PGRST116', message: 'The result contains 0 rows' },
+          }),
+        }),
+    })
+
+    const settings = await getOrgSettings('org-1', client)
+    expect(settings).toEqual({ moneda: 'MXN', impuestos: { activo: true, porcentaje: 16 } })
   })
 
   it('getOrgSettings sobreescribe los defaults con los del negocio', async () => {

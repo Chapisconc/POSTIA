@@ -20,23 +20,23 @@ export const DEFAULT_SETTINGS: OrgSettings = {
   impuestos: { activo: true, porcentaje: 16 },
 }
 
-type QueryResult = { data: unknown; error: unknown }
+export type QueryResult = { data: unknown; error: unknown }
 
-type SelectChain = QueryResult & {
+export type SelectChain = QueryResult & {
   single: () => Promise<QueryResult>
 }
 
-type QueryBuilder = {
+export type QueryBuilder = {
   select: (fields: string) => {
     eq: (column: string, value: string) => SelectChain
   }
 }
 
-type SupabaseClient = {
+export type ConfigClient = {
   from: (table: string) => QueryBuilder
 }
 
-export async function getOrgModules(orgId: string, client: SupabaseClient): Promise<Module[]> {
+export async function getOrgModules(orgId: string, client: ConfigClient): Promise<Module[]> {
   const { data, error } = await client
     .from('org_modules')
     .select('module_key')
@@ -51,14 +51,18 @@ export async function getOrgModules(orgId: string, client: SupabaseClient): Prom
   return MODULES.filter((m) => keys.includes(m.key))
 }
 
-export async function getOrgSettings(orgId: string, client: SupabaseClient): Promise<OrgSettings> {
+export async function getOrgSettings(orgId: string, client: ConfigClient): Promise<OrgSettings> {
   const { data, error } = await client
     .from('org_settings')
     .select('settings')
     .eq('organization_id', orgId)
     .single()
 
-  if (error) throw error
+  if (error) {
+    const code = (error as { code?: string }).code
+    if (code === 'PGRST116') return DEFAULT_SETTINGS
+    throw error
+  }
 
   const stored = (data as { settings?: Partial<OrgSettings> } | null)?.settings
   if (!stored) return DEFAULT_SETTINGS
@@ -73,7 +77,7 @@ export async function getOrgSettings(orgId: string, client: SupabaseClient): Pro
   }
 }
 
-export async function buildOrgConfig(orgId: string, client: SupabaseClient): Promise<OrgConfig> {
+export async function buildOrgConfig(orgId: string, client: ConfigClient): Promise<OrgConfig> {
   const [activeModules, settings] = await Promise.all([
     getOrgModules(orgId, client),
     getOrgSettings(orgId, client),
@@ -82,6 +86,6 @@ export async function buildOrgConfig(orgId: string, client: SupabaseClient): Pro
   return { orgId, activeModules, settings }
 }
 
-export async function resolveConfig(orgId: string, client: SupabaseClient): Promise<OrgConfig> {
+export async function resolveConfig(orgId: string, client: ConfigClient): Promise<OrgConfig> {
   return buildOrgConfig(orgId, client)
 }
