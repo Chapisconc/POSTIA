@@ -77,6 +77,111 @@ export async function getOrgSettings(orgId: string, client: ConfigClient): Promi
   }
 }
 
+export interface OrderStatus {
+  id: number
+  key: string
+  label: string
+  color: string
+  position: number
+  notify_kitchen: boolean
+  permite_cobro: boolean
+}
+
+export interface OrderType {
+  id: number
+  key: string
+  label: string
+  position: number
+  requires_address: boolean
+  requires_phone: boolean
+}
+
+export interface PaymentMethod {
+  id: number
+  key: string
+  label: string
+  position: number
+}
+
+type CatalogClient = {
+  from: (table: string) => {
+    select: (fields: string) => {
+      eq: (column: string, value: string) => {
+        order: (column: string) => Promise<QueryResult>
+      }
+    }
+  }
+}
+
+async function listCatalog(
+  client: ConfigClient,
+  table: string,
+  orgId: string,
+): Promise<Record<string, unknown>[]> {
+  const result = await (client as unknown as CatalogClient)
+    .from(table)
+    .select('*')
+    .eq('organization_id', orgId)
+    .order('position')
+
+  if (result.error) throw result.error
+  return (result.data ?? []) as Record<string, unknown>[]
+}
+
+function mapStatus(row: Record<string, unknown>): OrderStatus {
+  return {
+    id: row.id as number,
+    key: row.key as string,
+    label: row.label as string,
+    color: row.color as string,
+    position: row.position as number,
+    notify_kitchen: Boolean(row.notify_kitchen),
+    permite_cobro: Boolean(row.permite_cobro),
+  }
+}
+
+export async function getOrderStatuses(
+  orgId: string,
+  client: ConfigClient,
+): Promise<OrderStatus[]> {
+  const rows = await listCatalog(client, 'order_statuses', orgId)
+  return rows.map(mapStatus)
+}
+
+export async function getOrderTypes(orgId: string, client: ConfigClient): Promise<OrderType[]> {
+  const rows = await listCatalog(client, 'order_types', orgId)
+  return rows.map((row) => ({
+    id: row.id as number,
+    key: row.key as string,
+    label: row.label as string,
+    position: row.position as number,
+    requires_address: Boolean(row.requires_address),
+    requires_phone: Boolean(row.requires_phone),
+  }))
+}
+
+export async function getPaymentMethods(
+  orgId: string,
+  client: ConfigClient,
+): Promise<PaymentMethod[]> {
+  const rows = await listCatalog(client, 'payment_methods', orgId)
+  return rows.map((row) => ({
+    id: row.id as number,
+    key: row.key as string,
+    label: row.label as string,
+    position: row.position as number,
+  }))
+}
+
+export async function getInitialStatusId(
+  orgId: string,
+  client: ConfigClient,
+): Promise<number | null> {
+  const statuses = await getOrderStatuses(orgId, client)
+  const initial = statuses.find((s) => s.position === 0) ?? statuses[0]
+  return initial?.id ?? null
+}
+
 export async function buildOrgConfig(orgId: string, client: ConfigClient): Promise<OrgConfig> {
   const [activeModules, settings] = await Promise.all([
     getOrgModules(orgId, client),
