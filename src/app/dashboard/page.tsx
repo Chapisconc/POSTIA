@@ -10,6 +10,7 @@ const MODULE_ROUTES: Record<string, string> = {
   productos: '/dashboard/productos',
   pedidos: '/pedidos',
   reportes: '/reportes',
+  clientes: '/dashboard/clientes',
 }
 
 export default async function DashboardPage() {
