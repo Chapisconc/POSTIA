@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -18,10 +19,18 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             })
           } catch {
-            // El middleware de Next.js permite setear cookies.
+            // El proxy de Next.js permite setear cookies.
           }
         },
       },
     },
   )
 }
+
+export const getCurrentUser = cache(async () => {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  return user
+})

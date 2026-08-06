@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listDeliveries } from '@/lib/delivery/delivery'
 import type { DeliveriesClient } from '@/lib/delivery/delivery'
@@ -11,9 +11,7 @@ import { DeliveryView } from './delivery-view'
 export default async function DeliveryPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

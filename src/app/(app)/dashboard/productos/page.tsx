@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listProducts } from '@/lib/products/products'
 import type { ProductsClient } from '@/lib/products/products'
@@ -13,9 +13,7 @@ function formatPrice(value: number): string {
 export default async function ProductsPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

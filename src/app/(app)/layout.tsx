@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { getProfile, getOrganization } from '@/lib/org/org'
 import { resolveConfig } from '@/lib/config/service'
 import type { ConfigClient } from '@/lib/config/service'
@@ -8,9 +8,7 @@ import { AppShell, type ShellModule } from './app-shell'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { getProfile, getOrganization } from '@/lib/org/org'
 import { resolveConfig } from '@/lib/config/service'
 import { getSalesReport } from '@/lib/reports/reports'
@@ -31,9 +31,7 @@ function formatPrice(value: number): string {
 export default async function DashboardPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

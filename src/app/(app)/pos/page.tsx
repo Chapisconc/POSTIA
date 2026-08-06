@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listProducts } from '@/lib/products/products'
 import {
@@ -14,9 +14,7 @@ import { PosClient } from './pos-client'
 export default async function PosPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

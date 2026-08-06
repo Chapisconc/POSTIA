@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listReservations } from '@/lib/reservations/reservations'
 import type { ReservationsClient } from '@/lib/reservations/reservations'
@@ -9,9 +9,7 @@ import { ReservationView } from './reservation-view'
 export default async function ReservationsPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

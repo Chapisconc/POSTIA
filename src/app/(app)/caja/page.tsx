@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { getActiveRegister, listRegisters } from '@/lib/caja/caja'
 import type { CajaClient } from '@/lib/caja/caja'
@@ -9,9 +9,7 @@ import { CajaView } from './caja-view'
 export default async function CajaPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

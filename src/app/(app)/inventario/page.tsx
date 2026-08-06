@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listInventory, listMovements } from '@/lib/inventory/inventory'
 import type { InventoryClient } from '@/lib/inventory/inventory'
@@ -9,9 +9,7 @@ import { InventoryView } from './inventory-view'
 export default async function InventoryPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

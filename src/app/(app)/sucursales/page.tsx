@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listBranches } from '@/lib/branches/branches'
 import type { BranchesClient } from '@/lib/branches/branches'
@@ -9,9 +9,7 @@ import { BranchForm } from './branch-form'
 export default async function BranchesPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

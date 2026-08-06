@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listOrders } from '@/lib/orders/orders'
 import type { OrdersClient } from '@/lib/orders/orders'
@@ -12,9 +12,7 @@ import { InvoiceView } from './invoice-view'
 export default async function FacturacionPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

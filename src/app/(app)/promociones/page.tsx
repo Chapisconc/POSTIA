@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listPromotions } from '@/lib/promotions/promotions'
 import type { PromotionsClient } from '@/lib/promotions/promotions'
@@ -9,9 +9,7 @@ import { PromotionForm, PromotionList } from './promotion-form'
 export default async function PromocionesPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listCustomers } from '@/lib/customers/customers'
 import type { CustomersClient } from '@/lib/customers/customers'
@@ -11,9 +11,7 @@ import { LoyaltyView } from './loyalty-view'
 export default async function PuntosPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 

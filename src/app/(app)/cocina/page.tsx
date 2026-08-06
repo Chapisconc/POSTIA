@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentUser } from '@/lib/supabase/server'
 import { requireOrgId } from '@/lib/api/require-org'
 import { listKitchenOrders } from '@/lib/kitchen/kitchen'
 import { getOrderStatuses } from '@/lib/config/service'
@@ -10,9 +10,7 @@ import { KitchenView } from './kitchen-view'
 export default async function CocinaPage() {
   const client = await createClient()
 
-  const {
-    data: { user },
-  } = await client.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect('/login')
 
