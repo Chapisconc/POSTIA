@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# POSTIA — Punto de venta (POS) configurable para restaurantes
 
-## Getting Started
+Sistema de punto de venta para restaurantes donde el comportamiento del negocio
+(módulos activos, estados de pedido, tipos de pedido, métodos de pago, impuestos)
+se configura desde la base de datos, sin tocar código.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Next.js 16** (App Router, Turbopack, TypeScript) + **React 19** + **Tailwind CSS 4**
+- **Supabase** (PostgreSQL, Auth, RLS) — free tier
+- **Vitest** + **React Testing Library** (tests unitarios) y **Playwright** (E2E)
+- UI en español, TDD estricto (rojo → verde)
+
+## Arquitectura
+
+Cada negocio (`organizations`) es un tenant. `profiles` vincula al usuario con su
+organización y el RLS aísla los datos entre negocios.
+
+- `modules` / `org_modules` — módulos activos por negocio (pos, productos, caja, cocina…)
+- `order_statuses` — flujo de estados (con `position`, `permite_cobro`, `notify_kitchen`, `color`)
+- `order_types` — tipo de pedido (mesa, para llevar, a domicilio)
+- `payment_methods` — métodos de pago por negocio
+- `org_settings` — configuración (moneda, impuestos) con merge sobre defaults
+- `categories` / `products` — catálogo por negocio
+- `orders` — pedidos con items en snapshot y totales calculados en el servidor
+
+### Capas
+
+```
+src/lib/config      catálogo de módulos y lectura de configuración por org
+src/lib/products    servicio de productos
+src/lib/orders      servicio de pedidos (totales, cobro, avance de estado)
+src/lib/api         handlers HTTP testeables (cliente inyectado)
+src/app/api/*       rutas API (auth + requireOrgId + handler)
+src/app/<page>      páginas server + componentes cliente
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup local
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npx supabase start        # levanta Supabase local (docker)
+npm run dev               # http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Credenciales locales: `supabase/.env.local` (URL `http://127.0.0.1:54321`, anon key).
 
-## Learn More
+Las migraciones viven en `supabase/migrations/` y se aplican a la base local vía
+psql del contenedor (o `npx supabase db reset`).
 
-To learn more about Next.js, take a look at the following resources:
+## Tests
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run test              # vitest (unitarios)
+npx playwright test       # E2E (requiere el dev server o usa reuseExistingServer)
+npm run lint
+npx tsc --noEmit
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Flujo de alta
 
-## Deploy on Vercel
+1. `/register` — crea la cuenta (Supabase Auth)
+2. `/onboarding` — `rpc create_organization` crea el negocio con módulos,
+   estados, tipos y métodos por defecto
+3. `/dashboard` — muestra los módulos activos del negocio
+4. `/dashboard/productos` — catálogo
+5. `/pos` — registrar pedidos y cobrar
+6. `/pedidos` — avanzar el estado de cada pedido
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Proyecto remoto
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Ref: `anruvmeypudkrdvymsns` (https://anruvmeypudkrdvymsns.supabase.co)
+- Las migraciones se promueven con la Management API
+  (`POST /v1/projects/{ref}/database/query`) porque `supabase db push` cuelga con
+  este proyecto.
+- Para apuntar la app al remoto, cambia las variables en `.env.local` (URL del
+  proyecto + anon key).

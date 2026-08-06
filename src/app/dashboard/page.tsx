@@ -1,8 +1,15 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile, getOrganization } from '@/lib/org/org'
 import { resolveConfig } from '@/lib/config/service'
 import type { ConfigClient } from '@/lib/config/service'
+
+const MODULE_ROUTES: Record<string, string> = {
+  pos: '/pos',
+  productos: '/dashboard/productos',
+  pedidos: '/pedidos',
+}
 
 export default async function DashboardPage() {
   const client = await createClient()
@@ -45,15 +52,31 @@ export default async function DashboardPage() {
           Módulos activos
         </h2>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {config.activeModules.map((module) => (
-            <div
-              key={module.key}
-              className="rounded-2xl border border-slate-800 bg-slate-900 p-4"
-            >
-              <h3 className="mb-1 font-semibold">{module.label}</h3>
-              <p className="text-sm text-slate-400">{module.description}</p>
-            </div>
-          ))}
+          {config.activeModules.map((module) => {
+            const href = MODULE_ROUTES[module.key]
+            const card = (
+              <>
+                <h3 className="mb-1 font-semibold">{module.label}</h3>
+                <p className="text-sm text-slate-400">{module.description}</p>
+              </>
+            )
+            return href ? (
+              <Link
+                key={module.key}
+                href={href}
+                className="group rounded-2xl border border-slate-800 bg-slate-900 p-4 transition hover:border-emerald-500"
+              >
+                {card}
+                <span className="mt-2 block text-sm text-emerald-400 opacity-0 transition group-hover:opacity-100">
+                  Abrir →
+                </span>
+              </Link>
+            ) : (
+              <div key={module.key} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                {card}
+              </div>
+            )
+          })}
         </div>
       </div>
     </main>
