@@ -1,4 +1,4 @@
-import { createOrder, listOrders, type OrderItem } from '@/lib/orders/orders'
+import { createOrder, listOrders, chargeOrder, type OrderItem } from '@/lib/orders/orders'
 import { getOrgSettings } from '@/lib/config/service'
 import type { ConfigClient } from '@/lib/config/service'
 
@@ -58,5 +58,32 @@ export async function handleCreateOrderRequest(
   } catch (error) {
     console.error('orders-handler (POST):', error)
     return Response.json({ error: 'No se pudo crear el pedido' }, { status: 500 })
+  }
+}
+
+export async function handleChargeOrderRequest(
+  orgId: string,
+  client: ConfigClient,
+  orderId: number,
+  request: Request,
+) {
+  let body: { payment_method_id?: number }
+
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: 'Body JSON inválido' }, { status: 400 })
+  }
+
+  if (typeof body.payment_method_id !== 'number') {
+    return Response.json({ error: 'Se requiere el método de pago' }, { status: 400 })
+  }
+
+  try {
+    const order = await chargeOrder(client as never, orgId, orderId, body.payment_method_id)
+    return Response.json(order, { status: 200 })
+  } catch (error) {
+    console.error('orders-handler (PATCH):', error)
+    return Response.json({ error: 'No se pudo cobrar el pedido' }, { status: 500 })
   }
 }

@@ -1,4 +1,4 @@
-import { getInitialStatusId, type OrgSettings } from '@/lib/config/service'
+import { getInitialStatusId, getOrderStatuses, type OrgSettings } from '@/lib/config/service'
 
 export interface OrderItem {
   product_id: number
@@ -39,6 +39,11 @@ export type OrdersClient = {
     select: (fields: string) => {
       eq: (column: string, value: string) => {
         order: (column: string) => Promise<QueryResult>
+      }
+    }
+    update: (row: Record<string, unknown>) => {
+      eq: (column: string, value: string | number) => {
+        select: () => Promise<QueryResult>
       }
     }
   }
@@ -103,4 +108,24 @@ export async function listOrders(client: OrdersClient, orgId: string): Promise<O
 
   if (error) throw error
   return (data ?? []) as Order[]
+}
+
+export async function chargeOrder(
+  client: OrdersClient,
+  orgId: string,
+  orderId: number,
+  paymentMethodId: number,
+): Promise<Order> {
+  const statuses = await getOrderStatuses(orgId, client as never)
+  const payable = statuses.find((s) => s.permite_cobro)
+  if (!payable) throw new Error('No hay un estado que permita el cobro')
+
+  const { data, error } = await client
+    .from('orders')
+    .update({ status_id: payable.id, payment_method_id: paymentMethodId })
+    .eq('id', orderId)
+    .select()
+
+  if (error) throw error
+  return ((data as Order[] | null)?.[0] ?? null) as Order
 }

@@ -47,4 +47,9 @@ test('registrar un pedido desde el POS con total calculado', async ({ page }) =>
 
   await expect(page.getByRole('heading', { name: /pedido registrado/i })).toBeVisible()
   await expect(page.getByText('$116.00')).toBeVisible()
+
+  await page.getByRole('combobox', { name: /método de pago/i }).selectOption('Efectivo')
+  await page.getByRole('button', { name: /^cobrar$/i }).click()
+
+  await expect(page.getByText('Pedido pagado correctamente.')).toBeVisible()
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   calculateTotals,
+  chargeOrder,
   createOrder,
   listOrders,
   type OrderItem,
@@ -49,6 +50,7 @@ function ordersClient(handlers: {
   statuses?: () => { data?: Row[]; error?: unknown }
   insert?: () => { data?: Row[]; error?: unknown }
   list?: () => { data?: Row[]; error?: unknown }
+  update?: (row: Row) => { data?: Row[]; error?: unknown }
 }) {
   return {
     from: (table: string) => {
@@ -69,6 +71,14 @@ function ordersClient(handlers: {
           select: () => ({
             eq: () => ({
               order: () => Promise.resolve(handlers.list?.() ?? { data: [], error: null }),
+            }),
+          }),
+          update: (row: Row) => ({
+            eq: () => ({
+              select: () =>
+                Promise.resolve(
+                  handlers.update?.(row) ?? { data: [{ id: 1, ...row }], error: null },
+                ),
             }),
           }),
         }
@@ -157,6 +167,53 @@ describe('createOrder', () => {
         DEFAULT_SETTINGS,
       ),
     ).rejects.toThrow('insert failed')
+  })
+})
+
+describe('chargeOrder', () => {
+  it('marca el pedido como pagado con el método de pago elegido', async () => {
+    const updates: Row[] = []
+    const client = ordersClient({
+      statuses: () => ({
+        data: [
+          { id: 1, key: 'nuevo', label: 'Nuevo', position: 0, permite_cobro: false },
+          { id: 4, key: 'pagado', label: 'Pagado', position: 4, permite_cobro: true },
+        ],
+      }),
+      update: (row: Row) => {
+        updates.push(row)
+        return { data: [{ id: 7, ...row }], error: null }
+      },
+    })
+
+    const order = await chargeOrder(client as never, 'org-1', 7, 2)
+
+    expect(order.status_id).toBe(4)
+    expect(order.payment_method_id).toBe(2)
+    expect(updates[0]).toMatchObject({ status_id: 4, payment_method_id: 2 })
+  })
+
+  it('lanza si ningún estado permite cobro', async () => {
+    const client = ordersClient({
+      statuses: () => ({
+        data: [{ id: 1, key: 'nuevo', label: 'Nuevo', position: 0, permite_cobro: false }],
+      }),
+    })
+
+    await expect(chargeOrder(client as never, 'org-1', 7, 2)).rejects.toThrow(
+      'No hay un estado que permita el cobro',
+    )
+  })
+
+  it('propaga errores de la BD', async () => {
+    const client = ordersClient({
+      statuses: () => ({
+        data: [{ id: 4, key: 'pagado', label: 'Pagado', position: 4, permite_cobro: true }],
+      }),
+      update: () => ({ error: new Error('update failed') }),
+    })
+
+    await expect(chargeOrder(client as never, 'org-1', 7, 2)).rejects.toThrow('update failed')
   })
 })
 

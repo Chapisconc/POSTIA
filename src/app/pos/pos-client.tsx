@@ -3,11 +3,7 @@
 import { useMemo, useState } from 'react'
 import type { OrderItem, Order } from '@/lib/orders/orders'
 import type { Product } from '@/lib/products/products'
-import type {
-  OrderType,
-  OrderStatus,
-  OrgSettings,
-} from '@/lib/config/service'
+import type { OrderType, OrderStatus, PaymentMethod, OrgSettings } from '@/lib/config/service'
 
 function formatPrice(value: number): string {
   return value.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -18,10 +14,10 @@ function round2(value: number): number {
 }
 
 interface PosClientProps {
-  orgId: string
   products: Product[]
   orderTypes: OrderType[]
   orderStatuses: OrderStatus[]
+  paymentMethods: PaymentMethod[]
   settings: OrgSettings
 }
 
@@ -29,12 +25,15 @@ export function PosClient({
   products,
   orderTypes,
   orderStatuses,
+  paymentMethods,
   settings,
 }: PosClientProps) {
   const [cart, setCart] = useState<Map<number, { product: Product; qty: number }>>(new Map())
   const [orderTypeId, setOrderTypeId] = useState<number>(orderTypes[0]?.id ?? 0)
   const [submitting, setSubmitting] = useState(false)
   const [created, setCreated] = useState<Order | null>(null)
+  const [charged, setCharged] = useState(false)
+  const [paymentMethodId, setPaymentMethodId] = useState<number>(paymentMethods[0]?.id ?? 0)
   const [error, setError] = useState<string | null>(null)
 
   const items: OrderItem[] = useMemo(
@@ -102,6 +101,26 @@ export function PosClient({
       setError('Error de conexión al registrar el pedido')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const chargeOrder = async () => {
+    if (!created) return
+    setError(null)
+    try {
+      const response = await fetch(`/api/orders/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_method_id: paymentMethodId }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setError(data.error ?? 'No se pudo cobrar el pedido')
+        return
+      }
+      setCharged(true)
+    } catch {
+      setError('Error de conexión al cobrar el pedido')
     }
   }
 
@@ -238,10 +257,48 @@ export function PosClient({
                 <dd className="font-mono">{formatPrice(created.total)}</dd>
               </div>
             </dl>
+
+            {charged ? (
+              <p className="mb-4 text-emerald-400">Pedido pagado correctamente.</p>
+            ) : (
+              <>
+                <div className="mb-4 text-left">
+                  <label htmlFor="payment-method" className="mb-1 block text-sm text-slate-400">
+                    Método de pago
+                  </label>
+                  <select
+                    id="payment-method"
+                    aria-label="Método de pago"
+                    value={paymentMethodId}
+                    onChange={(e) => setPaymentMethodId(Number(e.target.value))}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
+                  >
+                    {paymentMethods.map((method) => (
+                      <option key={method.id} value={method.id}>
+                        {method.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+                <button
+                  type="button"
+                  onClick={chargeOrder}
+                  className="mb-2 w-full rounded-xl bg-emerald-600 py-3 font-semibold hover:bg-emerald-500"
+                >
+                  Cobrar
+                </button>
+              </>
+            )}
+
             <button
               type="button"
-              onClick={() => setCreated(null)}
-              className="w-full rounded-xl bg-emerald-600 py-3 font-semibold hover:bg-emerald-500"
+              onClick={() => {
+                setCreated(null)
+                setCharged(false)
+                setError(null)
+              }}
+              className="w-full rounded-xl bg-slate-700 py-3 font-semibold hover:bg-slate-600"
             >
               Nuevo pedido
             </button>
