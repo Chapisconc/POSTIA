@@ -23,6 +23,7 @@ organización y el RLS aísla los datos entre negocios.
 - `org_settings` — configuración (moneda, impuestos) con merge sobre defaults
 - `categories` / `products` — catálogo por negocio
 - `orders` — pedidos con items en snapshot y totales calculados en el servidor
+- `reports` — reporte de ventas (agrupa pedidos cobrados por método de pago)
 
 ### Capas
 
@@ -30,6 +31,7 @@ organización y el RLS aísla los datos entre negocios.
 src/lib/config      catálogo de módulos y lectura de configuración por org
 src/lib/products    servicio de productos
 src/lib/orders      servicio de pedidos (totales, cobro, avance de estado)
+src/lib/reports     reporte de ventas por método de pago
 src/lib/api         handlers HTTP testeables (cliente inyectado)
 src/app/api/*       rutas API (auth + requireOrgId + handler)
 src/app/<page>      páginas server + componentes cliente
@@ -66,6 +68,7 @@ npx tsc --noEmit
 4. `/dashboard/productos` — catálogo
 5. `/pos` — registrar pedidos y cobrar
 6. `/pedidos` — avanzar el estado de cada pedido
+7. `/reportes` — ventas totales y por método de pago (también `GET /api/reports/sales`)
 
 ## Proyecto remoto
 
