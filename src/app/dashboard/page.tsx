@@ -9,6 +9,7 @@ const MODULE_ROUTES: Record<string, string> = {
   pos: '/pos',
   productos: '/dashboard/productos',
   pedidos: '/pedidos',
+  reportes: '/reportes',
 }
 
 export default async function DashboardPage() {
