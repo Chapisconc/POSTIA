@@ -1,0 +1,426 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Tokens de diseño POSTIA ----
+   Todo el sistema visual se controla desde aquí. Los componentes usan
+   variables (--c-*, --font-*, --radius-*, --shadow-*) que se re-tematizan
+   en vivo cambiando [data-font], [data-radius], [data-style], [data-theme].
+   Estos atributos los gestiona src/lib/theme.js desde Apariencia. */
+
+:root {
+  --c-brand: 37 99 235;
+  --c-brandLight: 14 165 224;
+  --c-brandDark: 29 78 216;
+  --c-brandSoft: 219 234 254;
+  --c-night: 15 23 42;
+  --c-nightLight: 30 41 59;
+  --c-nightLighter: 51 65 85;
+  --c-gold: 212 160 23;
+  --c-goldDark: 161 98 7;
+  --c-goldSoft: 254 243 199;
+  --c-danger: 220 38 38;
+  --c-dangerDark: 185 28 28;
+  --c-dangerSoft: 254 226 226;
+  --c-success: 5 150 105;
+  --c-successDark: 6 95 70;
+  --c-successSoft: 209 250 229;
+  --c-warning: 217 119 6;
+  --c-warningDark: 146 64 14;
+  --c-warningSoft: 254 243 199;
+  --c-info: 2 132 199;
+  --c-infoDark: 3 105 161;
+  --c-infoSoft: 224 242 254;
+  --c-page: 248 250 252;
+  --c-card: 255 255 255;
+  --c-muted: 148 163 184;
+  --c-line: 226 232 240;
+}
+
+/* ---- Tipografía ---- */
+:root,
+[data-font='plus-jakarta-sans'] {
+  --font-sans: 'Plus Jakarta Sans Variable', system-ui, -apple-system, sans-serif;
+}
+[data-font='inter'] { --font-sans: 'Inter Variable', system-ui, -apple-system, sans-serif; }
+[data-font='manrope'] { --font-sans: 'Manrope Variable', system-ui, -apple-system, sans-serif; }
+[data-font='dm-sans'] { --font-sans: 'DM Sans Variable', system-ui, -apple-system, sans-serif; }
+[data-font='geist'] { --font-sans: 'Geist Variable', system-ui, -apple-system, sans-serif; }
+[data-font='ibm-plex-sans'] { --font-sans: 'IBM Plex Sans Variable', system-ui, -apple-system, sans-serif; }
+
+:root { --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', 'Consolas', monospace; }
+
+/* ---- Radio de bordes (Bordes: sm | md | lg) ---- */
+:root,
+[data-radius='md'] {
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+}
+[data-radius='sm'] {
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
+}
+[data-radius='lg'] {
+  --radius-sm: 0.75rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+}
+
+/* ---- Sombras (Estilo: minimal | modern | soft | professional) ---- */
+:root,
+[data-style='modern'] {
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05), 0 1px 3px rgb(15 23 42 / 0.05);
+  --shadow-float: 0 4px 10px rgb(15 23 42 / 0.07), 0 2px 4px rgb(15 23 42 / 0.04);
+  --shadow-pop: 0 10px 30px rgb(15 23 42 / 0.14), 0 4px 8px rgb(15 23 42 / 0.08);
+}
+[data-style='minimal'] {
+  --shadow-card: none;
+  --shadow-float: none;
+  --shadow-pop: 0 4px 16px rgb(15 23 42 / 0.10);
+}
+[data-style='soft'] {
+  --shadow-card: 0 2px 6px rgb(15 23 42 / 0.05), 0 1px 2px rgb(15 23 42 / 0.03);
+  --shadow-float: 0 8px 20px rgb(15 23 42 / 0.08);
+  --shadow-pop: 0 16px 40px rgb(15 23 42 / 0.15);
+}
+[data-style='professional'] {
+  --shadow-card: 0 1px 3px rgb(15 23 42 / 0.08);
+  --shadow-float: 0 4px 12px rgb(15 23 42 / 0.10);
+  --shadow-pop: 0 12px 28px rgb(15 23 42 / 0.14);
+}
+
+/* ---- Paletas (gestionadas por src/lib/theme.js → [data-palette]) ----
+   Cada paleta define el acento (brand) y las superficies en claro.
+   [data-theme='dark'] está definido después y remapea las superficies,
+   así el acento de la paleta se conserva también en modo oscuro. */
+:root,
+[data-palette='postia'] {
+  --c-brand: 37 99 235;
+  --c-brandSoft: 219 234 254;
+  --c-brandDark: 29 78 216;
+  --c-page: 248 250 252;
+  --c-card: 255 255 255;
+  --c-night: 15 23 42;
+  --c-line: 226 232 240;
+}
+[data-palette='sunset'] {
+  --c-brand: 234 118 46;
+  --c-brandSoft: 255 237 213;
+  --c-brandDark: 194 88 12;
+  --c-page: 255 247 237;
+  --c-card: 255 255 255;
+  --c-night: 67 20 7;
+  --c-line: 254 215 170;
+}
+[data-palette='emerald'] {
+  --c-brand: 5 150 105;
+  --c-brandSoft: 209 250 229;
+  --c-brandDark: 4 120 87;
+  --c-page: 236 253 245;
+  --c-card: 255 255 255;
+  --c-night: 2 44 34;
+  --c-line: 167 243 208;
+}
+[data-palette='berry'] {
+  --c-brand: 190 24 93;
+  --c-brandSoft: 252 231 243;
+  --c-brandDark: 157 23 77;
+  --c-page: 253 242 248;
+  --c-card: 255 255 255;
+  --c-night: 80 7 36;
+  --c-line: 251 207 232;
+}
+[data-palette='slate'] {
+  --c-brand: 71 85 105;
+  --c-brandSoft: 241 245 249;
+  --c-brandDark: 51 65 85;
+  --c-page: 248 250 252;
+  --c-card: 255 255 255;
+  --c-night: 15 23 42;
+  --c-line: 226 232 240;
+}
+[data-palette='midnight'] {
+  --c-brand: 99 102 241;
+  --c-brandSoft: 224 231 255;
+  --c-brandDark: 79 70 229;
+  --c-page: 238 242 255;
+  --c-card: 255 255 255;
+  --c-night: 30 27 75;
+  --c-line: 199 210 254;
+}
+
+html, body, #root { height: 100%; }
+html { color-scheme: light dark; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: rgb(var(--c-page));
+  color: rgb(var(--c-night));
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: rgb(var(--c-brandSoft)); }
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--c-muted) / 0.4) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--c-muted) / 0.4); border-radius: 9999px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- Tema oscuro (remap de tokens semánticos) ---- */
+[data-theme='dark'] {
+  --c-page: 15 23 42;
+  --c-card: 30 41 59;
+  --c-night: 226 232 240;
+  --c-nightLight: 203 213 225;
+  --c-nightLighter: 148 163 184;
+  --c-line: 51 65 85;
+  --c-muted: 148 163 184;
+  --c-brandSoft: 30 58 138;
+  --c-gold: 252 211 77;
+  --c-goldDark: 253 230 138;
+  --c-goldSoft: 69 26 3;
+  --c-danger: 248 113 113;
+  --c-dangerDark: 254 202 202;
+  --c-dangerSoft: 69 10 10;
+  --c-success: 52 211 153;
+  --c-successDark: 167 243 208;
+  --c-successSoft: 6 78 59;
+  --c-warning: 251 191 36;
+  --c-warningDark: 252 211 77;
+  --c-warningSoft: 69 26 3;
+  --c-info: 56 189 248;
+  --c-infoDark: 186 230 253;
+  --c-infoSoft: 12 74 110;
+}
+/* Soft del acento por paleta en modo oscuro (el bloque de arriba usa un
+   soft neutro azulado; aquí cada paleta aporta su tinte oscuro propio). */
+[data-theme='dark'][data-palette='sunset'] { --c-brandSoft: 67 20 7; }
+[data-theme='dark'][data-palette='emerald'] { --c-brandSoft: 6 78 59; }
+[data-theme='dark'][data-palette='berry'] { --c-brandSoft: 80 7 36; }
+[data-theme='dark'][data-palette='slate'] { --c-brandSoft: 51 65 85; }
+[data-theme='dark'][data-palette='midnight'] { --c-brandSoft: 30 27 75; }
+[data-theme='dark'] .bg-night { background-color: rgb(15 23 42); }
+[data-theme='dark'] .bg-night\/40 { background-color: rgb(15 23 42 / 0.4); }
+[data-theme='dark'] .bg-night\/50 { background-color: rgb(15 23 42 / 0.5); }
+[data-theme='dark'] .bg-night\/80 { background-color: rgb(15 23 42 / 0.8); }
+[data-theme='dark'] .bg-white { background-color: rgb(var(--c-card)); }
+[data-theme='dark'] .bg-white\/10 { background-color: rgb(255 255 255 / 0.08); }
+[data-theme='dark'] .bg-white\/15 { background-color: rgb(255 255 255 / 0.1); }
+[data-theme='dark'] .border-white\/10 { border-color: rgb(255 255 255 / 0.12); }
+
+/* ---- Utils responsivas ----
+   no-scrollbar: oculta la barra de scroll de filas deslizables (píldoras).
+   touch-target: área táctil mínima 44px en móvil y tablet (estándar UX).
+   touch-icon: área táctil 44×44px para botones de solo icono. */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+@media (max-width: 1023px) {
+  .touch-target { min-height: 44px; }
+  .touch-icon { min-width: 44px; min-height: 44px; display: inline-grid; place-items: center; }
+}
+
+/* ---- Glassmorphism ----
+   Vidrio esmerilado: backdrop blur + fondo/borde translúcidos para crear
+   capas sobre el fondo. En modo claro se atenúa a blanco translúcido con
+   texto oscuro para conservar la legibilidad. En modo oscuro usa fondo
+   oscuro translúcido con texto claro. */
+
+.glass-btn {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  background-color: rgb(255 255 255 / 0.6);
+  border: 1px solid rgb(0 0 0 / 0.08);
+  color: rgb(15 23 42);
+}
+
+.glass-pill {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  background-color: rgb(255 255 255 / 0.7);
+  border: 1px solid rgb(0 0 0 / 0.1);
+  color: rgb(15 23 42);
+  font-weight: 600;
+}
+
+[data-theme='dark'] .glass-btn {
+  background-color: rgb(15 23 42 / 0.6);
+  border-color: rgb(255 255 255 / 0.12);
+  color: rgb(248 250 252);
+}
+
+[data-theme='dark'] .glass-pill {
+  background-color: rgb(15 23 42 / 0.7);
+  border-color: rgb(255 255 255 / 0.15);
+  color: rgb(248 250 252);
+  font-weight: 600;
+}
+
+[data-theme='dark'] .glass-btn:hover {
+  background-color: rgb(15 23 42 / 0.75);
+}
+
+.glass-btn:hover {
+  background-color: rgb(255 255 255 / 0.8);
+}
+
+/* ---- Modo oscuro: utilidades de color claras remapeadas ----
+   Algunas vistas usan fondos/textos claros de Tailwind (bg-*-50/100,
+   text-*-700/800) que en modo oscuro se ven brillantes o ilegibles. Aquí
+   se re-tematizan esas utilidades para que luzcan coherentes en dark. */
+[data-theme='dark'] .bg-emerald-50 { background-color: rgb(6 78 59 / 0.4); }
+[data-theme='dark'] .bg-emerald-100 { background-color: rgb(6 78 59 / 0.6); }
+[data-theme='dark'] .bg-amber-50 { background-color: rgb(69 26 3 / 0.4); }
+[data-theme='dark'] .bg-amber-100 { background-color: rgb(69 26 3 / 0.6); }
+[data-theme='dark'] .bg-sky-50 { background-color: rgb(12 74 110 / 0.4); }
+[data-theme='dark'] .bg-sky-100 { background-color: rgb(12 74 110 / 0.6); }
+[data-theme='dark'] .bg-red-100 { background-color: rgb(69 10 10 / 0.6); }
+[data-theme='dark'] .bg-purple-100 { background-color: rgb(46 16 101 / 0.6); }
+[data-theme='dark'] .bg-gray-100 { background-color: rgb(51 65 85 / 0.5); }
+[data-theme='dark'] .bg-gray-200 { background-color: rgb(51 65 85 / 0.8); }
+[data-theme='dark'] .bg-gray-50 { background-color: rgb(var(--c-card)); }
+[data-theme='dark'] .bg-blue-50 { background-color: rgb(30 58 138 / 0.4); }
+[data-theme='dark'] .bg-indigo-50 { background-color: rgb(49 46 129 / 0.4); }
+[data-theme='dark'] .bg-orange-50 { background-color: rgb(124 45 18 / 0.4); }
+[data-theme='dark'] .bg-red-50 { background-color: rgb(127 29 29 / 0.4); }
+[data-theme='dark'] .bg-blue-100 { background-color: rgb(30 58 138 / 0.6); }
+[data-theme='dark'] .bg-indigo-100 { background-color: rgb(49 46 129 / 0.6); }
+[data-theme='dark'] .bg-orange-100 { background-color: rgb(124 45 18 / 0.6); }
+
+[data-theme='dark'] .text-emerald-600 { color: rgb(52 211 153); }
+[data-theme='dark'] .text-emerald-700 { color: rgb(110 231 183); }
+[data-theme='dark'] .text-emerald-800 { color: rgb(167 243 208); }
+[data-theme='dark'] .text-amber-600 { color: rgb(251 191 36); }
+[data-theme='dark'] .text-amber-700 { color: rgb(252 211 77); }
+[data-theme='dark'] .text-amber-800 { color: rgb(253 230 138); }
+[data-theme='dark'] .text-sky-600 { color: rgb(56 189 248); }
+[data-theme='dark'] .text-sky-700 { color: rgb(125 211 252); }
+[data-theme='dark'] .text-sky-800 { color: rgb(186 230 253); }
+[data-theme='dark'] .text-red-600 { color: rgb(248 113 113); }
+[data-theme='dark'] .text-purple-600 { color: rgb(192 132 252); }
+[data-theme='dark'] .text-purple-700 { color: rgb(216 180 254); }
+[data-theme='dark'] .text-gray-500 { color: rgb(148 163 184); }
+[data-theme='dark'] .text-gray-600 { color: rgb(148 163 184); }
+[data-theme='dark'] .text-gray-700 { color: rgb(203 213 225); }
+[data-theme='dark'] .text-gray-800 { color: rgb(226 232 240); }
+[data-theme='dark'] .text-gray-900 { color: rgb(241 245 249); }
+[data-theme='dark'] .text-gray-400 { color: rgb(148 163 184); }
+[data-theme='dark'] .text-gray-300 { color: rgb(203 213 225); }
+[data-theme='dark'] .text-red-700 { color: rgb(252 165 165); }
+[data-theme='dark'] .text-orange-700 { color: rgb(253 186 116); }
+[data-theme='dark'] .text-blue-600 { color: rgb(147 197 253); }
+[data-theme='dark'] .text-indigo-600 { color: rgb(165 180 252); }
+[data-theme='dark'] .border-red-200 { border-color: rgb(127 29 29 / 0.7); }
+
+[data-theme='dark'] .border-emerald-200 { border-color: rgb(6 78 59 / 0.8); }
+[data-theme='dark'] .border-emerald-400 { border-color: rgb(52 211 153 / 0.5); }
+[data-theme='dark'] .border-emerald-500 { border-color: rgb(16 185 129 / 0.6); }
+[data-theme='dark'] .border-amber-200 { border-color: rgb(69 26 3 / 0.8); }
+[data-theme='dark'] .border-amber-400 { border-color: rgb(251 191 36 / 0.5); }
+[data-theme='dark'] .border-sky-300 { border-color: rgb(125 211 252 / 0.4); }
+[data-theme='dark'] .border-gray-200 { border-color: rgb(51 65 85 / 0.7); }
+[data-theme='dark'] .border-gray-300 { border-color: rgb(51 65 85 / 0.9); }
+[data-theme='dark'] .border-gray-400 { border-color: rgb(100 116 139 / 0.7); }
+[data-theme='dark'] .border-gray-100 { border-color: rgb(51 65 85 / 0.5); }
+[data-theme='dark'] .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(51 65 85 / 0.5); }
+
+[data-theme='dark'] .bg-sky-600 { background-color: rgb(56 189 248); }
+[data-theme='dark'] .bg-sky-700 { background-color: rgb(56 189 248 / 0.8); }
+[data-theme='dark'] .bg-purple-600 { background-color: rgb(192 132 252); }
+[data-theme='dark'] .bg-purple-700 { background-color: rgb(192 132 252 / 0.8); }
+[data-theme='dark'] .bg-sky-400 { background-color: rgb(56 189 248 / 0.7); }
+[data-theme='dark'] .bg-amber-400 { background-color: rgb(251 191 36 / 0.7); }
+[data-theme='dark'] .bg-emerald-400 { background-color: rgb(52 211 153 / 0.7); }
+[data-theme='dark'] .border-red-300 { border-color: rgb(248 113 113 / 0.5); }
+[data-theme='dark'] .text-pink-500 { color: rgb(244 172 216); }
+[data-theme='dark'] .text-pink-700 { color: rgb(244 172 216); }
+[data-theme='dark'] .border-l-pink-400 { border-color: rgb(244 172 216); }
+[data-theme='dark'] .bg-blue-600 { background-color: rgb(96 165 250); }
+
+/* ---- Badges: contraste en dark ---- */
+[data-theme='dark'] .bg-brand-soft.text-brand-dark { background-color: rgb(30 58 138); color: rgb(147 197 253); }
+[data-theme='dark'] .bg-gold-soft.text-gold-dark { background-color: rgb(69 26 3); color: rgb(253 230 138); }
+[data-theme='dark'] .border-orange-400 { border-color: rgb(251 146 60 / 0.5); }
+
+/* ---- Píldoras de estado rellenas ----
+   Cada estado lleva su color de relleno (info/warning/success/danger).
+   El neutro (finalizado) usa gris pizarra fijo y el tono brand (Todos)
+   azul sólido. Texto blanco; en tema oscuro los tonos claros cambian el
+   texto a oscuro para mantener el contraste (chips tipo Linear/Notion). */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  border-radius: 9999px;
+  font-weight: 700;
+  color: #fff;
+  background: rgb(100 116 139);
+  border: 1px solid rgb(255 255 255 / 0.18);
+}
+.status-pill.brand { background: rgb(var(--c-brand)); }
+.status-pill.info { background: rgb(var(--c-info)); }
+.status-pill.success { background: rgb(var(--c-success)); }
+.status-pill.warning { background: rgb(var(--c-warning)); }
+.status-pill.danger { background: rgb(var(--c-danger)); }
+[data-theme='dark'] .status-pill.info,
+[data-theme='dark'] .status-pill.success,
+[data-theme='dark'] .status-pill.warning,
+[data-theme='dark'] .status-pill.danger { color: rgb(15 23 42); }
+
+/* Punto de color de los estados (usado por el filtro). El tamaño se pone
+   con utilidades Tailwind; aquí solo el relleno semántico, igual que las
+   píldoras rellenas. */
+.tone-dot { border-radius: 9999px; }
+.tone-dot.brand { background-color: rgb(var(--c-brand)); }
+.tone-dot.info { background-color: rgb(var(--c-info)); }
+.tone-dot.success { background-color: rgb(var(--c-success)); }
+.tone-dot.warning { background-color: rgb(var(--c-warning)); }
+.tone-dot.muted { background-color: rgb(var(--c-muted)); }
+.tone-dot.danger { background-color: rgb(var(--c-danger)); }
+
+/* Textos de estado con contraste adaptativo al tema */
+.paid-label { color: rgb(4 120 87); }
+[data-theme='dark'] .paid-label { color: #86efac; }
+.pending-label { color: rgb(161 98 7); }
+[data-theme='dark'] .pending-label { color: rgb(253 230 138); }
+
+/* Contador dentro de píldoras (legible sobre vidrio en ambos temas) */
+.pill-count { background-color: rgb(0 0 0 / 0.08); color: rgb(15 23 42 / 0.65); }
+[data-theme='dark'] .pill-count { background-color: rgb(255 255 255 / 0.18); color: rgb(255 255 255 / 0.85); }
+
+/* ---- Densidad (gestionada por src/lib/theme.js → [data-density]) ---- */
+:root,
+[data-density='normal'] {
+  --den-cell: 0.75rem;
+  --den-gap: 0.75rem;
+}
+[data-density='compact'] {
+  --den-cell: 0.5rem;
+  --den-gap: 0.5rem;
+}
+[data-density='comfortable'] {
+  --den-cell: 1rem;
+  --den-gap: 1rem;
+}
+
+@keyframes closeGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--c-danger) / 0); }
+  50% { box-shadow: 0 0 8px 2px rgba(var(--c-danger) / 0.3); }
+}
+.close-glow {
+  animation: closeGlow 2s ease-in-out infinite;
+}
+.close-glow:hover {
+  animation: none;
+  box-shadow: 0 0 8px 3px rgba(var(--c-danger) / 0.5);
+}
