@@ -1,4 +1,5 @@
 import React, { useState, useEffect, forwardRef } from 'react'
+import { Search } from 'lucide-react'
 
 export function Card({ children, className = '', ...rest }) {
   return (
@@ -248,11 +249,12 @@ export function Segmented({ options, value, onChange, className = '' }) {
   )
 }
 
-export function SearchInput({ value, onChange, placeholder = 'Buscar…', className = '' }) {
+export const SearchInput = forwardRef(({ value, onChange, placeholder = 'Buscar…', className = '' }, ref) => {
   return (
     <div className={`relative ${className}`}>
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"><Search size={16} /></span>
       <input
+        ref={ref}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -260,7 +262,7 @@ export function SearchInput({ value, onChange, placeholder = 'Buscar…', classN
       />
     </div>
   )
-}
+})
 
 export function EmptyState({ icon = '📭', title, message, action }) {
   return (

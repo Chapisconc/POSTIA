@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { Clock, X, Plus, Percent, Box, HandCoins, Tag, Printer, Check, ArrowLeft, ArrowLeftRight, Banknote, CheckCircle2, ChefHat } from 'lucide-react'
+import { Clock, X, Plus, Percent, Box, HandCoins, Tag, Printer, Check, ArrowLeft, ArrowLeftRight, Banknote, CheckCircle2, ChefHat, ShoppingBag, Zap, Bike, Utensils } from 'lucide-react'
 import { Card, Button, Badge, Field, Input, Select, Modal, QtyStepper, Segmented, EmptyState, SearchInput } from '../ui'
 import ModifierPicker from '../shared/ModifierPicker'
 import { ServiceBadge, OrderStatusBadge } from '../shared/StatusBadge'
@@ -7,6 +7,7 @@ import { fmtMoney, fmtDec, fmtDuration } from '../../lib/format'
 import { toast, toastOk, toastErr, toastWarn } from '../../lib/notify'
 import { soundNewOrder, vibrate } from '../../lib/sound'
 import { fuzzyMatch } from '../../lib/search'
+import { useBreakpoint, useKeyboard } from '../../hooks'
 
 import { printTicket } from '../../lib/ticket'
 import {
@@ -55,10 +56,10 @@ function FreeProductModal({ onClose, onAdd }) {
 }
 
 const SERVICE_OPTIONS = [
-  { value: 'mostrador', emoji: '🛍️', label: 'Para llevar', desc: 'Pedido para recoger en mostrador. Rápido y directo.' },
-  { value: 'express', emoji: '⚡', label: 'Express', desc: 'Pedido rápido sin cliente. Directo al catálogo.' },
-  { value: 'domicilio', emoji: '🛵', label: 'Domicilio', desc: 'Entrega a dirección del cliente.' },
-  { value: 'mesa', emoji: '🍽️', label: 'Mesa', desc: 'Comensal en restaurante. Selecciona mesa.' },
+  { value: 'mostrador', emoji: '🛍️', icon: ShoppingBag, label: 'Para llevar', desc: 'Pedido para recoger en mostrador. Rápido y directo.' },
+  { value: 'express', emoji: '⚡', icon: Zap, label: 'Express', desc: 'Pedido rápido sin cliente. Directo al catálogo.' },
+  { value: 'domicilio', emoji: '🛵', icon: Bike, label: 'Domicilio', desc: 'Entrega a dirección del cliente.' },
+  { value: 'mesa', emoji: '🍽️', icon: Utensils, label: 'Mesa', desc: 'Comensal en restaurante. Selecciona mesa.' },
 ]
 
 function ClientServiceDrawer({ open, onClose, onConfirm, state, user, existingOrder, isNewOrder = false, currentItems = [], currentOrderId = null, currentServiceType = 'mostrador' }) {
@@ -252,7 +253,7 @@ function ClientServiceDrawer({ open, onClose, onConfirm, state, user, existingOr
                     className={`relative flex flex-col items-start text-left rounded-xl border-2 p-4 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${selected ? 'border-brand bg-brand-soft/40 ring-2 ring-brand/30 shadow-md' : 'border-line hover:border-brand bg-card'} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-2xl">{o.emoji}</span>
+                      {o.icon && <o.icon size={22} className="text-brand" />}
                       <span className="font-bold text-night text-base">{o.label}</span>
                     </div>
                     <span className="text-xs text-muted leading-relaxed">{o.desc}</span>
@@ -472,6 +473,9 @@ function PosTimer({ start }) {
 }
 
 export default function POS({ state, refresh, onNav, params, user }) {
+  const breakpoint = useBreakpoint()
+  // Desktop/tablet: catálogo + pedido en zonas separadas. Mobile: una sola zona + drawer.
+  const isDesktop = breakpoint !== 'mobile'
   const [serviceType, setServiceType] = useState('mostrador')
   const [tableId, setTableId] = useState('')
   const [orderTitle, setOrderTitle] = useState('')
@@ -513,18 +517,24 @@ export default function POS({ state, refresh, onNav, params, user }) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [confirmError, setConfirmError] = useState('')
 
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-      ? window.matchMedia('(min-width: 1024px)').matches
-      : true
-  )
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const mq = window.matchMedia('(min-width: 1024px)')
-    const onChange = (e) => setIsDesktop(e.matches)
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
+  // Atajos de teclado para PC (punto #9): F2 buscar, F3 nuevo pedido, F4 cobrar.
+  const searchRef = useRef(null)
+  const startNewOrder = useCallback(() => {
+    setServiceType('mostrador'); setTableId(''); setOrderTitle(''); setClientName(''); setClientPhone('')
+    setAddress(''); setColony(''); setReference(''); setDeliveryCost(''); setItems([]); setDiscountVal('')
+    setDiscountMode('$'); setTip(''); setPackCost(''); setCouponCode(''); setOrderId(null)
+    setCartOpen(false); setCatalogOpen(false); setPayTarget(null)
   }, [])
+  const openPayment = useCallback(() => {
+    if (!orderId) { toastWarn('Crea o abre un pedido primero'); return }
+    const o = state.orders.find((x) => x.id === orderId)
+    if (o) setPayTarget(o)
+  }, [orderId, state.orders])
+  useKeyboard((e) => {
+    if (e.key === 'F2') { e.preventDefault(); searchRef.current?.focus() }
+    else if (e.key === 'F3') { e.preventDefault(); startNewOrder() }
+    else if (e.key === 'F4') { e.preventDefault(); openPayment() }
+  })
 
   useEffect(() => {
     setServiceType('mostrador')
@@ -1019,7 +1029,7 @@ export default function POS({ state, refresh, onNav, params, user }) {
             </div>
           </div>
           <div className="px-3 pb-2.5 flex gap-2">
-            <SearchInput value={search} onChange={setSearch} placeholder="Buscar…" className="flex-1 !py-2 !text-[12px]" />
+            <SearchInput ref={searchRef} value={search} onChange={setSearch} placeholder="Buscar… (F2)" className="flex-1 !py-2 !text-[12px]" />
             <Button onClick={() => setFreeOpen(true)} className="shrink-0 !py-2 !text-xs touch-target"><Tag size={12} className="mr-1" /> Libre</Button>
           </div>
         </div>
@@ -1047,7 +1057,7 @@ export default function POS({ state, refresh, onNav, params, user }) {
                 className="flex items-center gap-1.5 text-sm font-bold text-brand shrink-0 px-3 py-2 rounded-lg hover:bg-brand-soft transition">
                 <ArrowLeft size={16} /> Volver
               </button>
-              <SearchInput value={search} onChange={setSearch} placeholder="Buscar… (F2)" className="flex-1 !py-1.5 !text-[12px]" />
+              <SearchInput ref={searchRef} value={search} onChange={setSearch} placeholder="Buscar… (F2)" className="flex-1 !py-1.5 !text-[12px]" />
               <Button onClick={() => setFreeOpen(true)} className="shrink-0 !py-1.5 !text-xs"><Tag size={13} className="mr-1" /> Libre</Button>
             </div>
 
