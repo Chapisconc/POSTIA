@@ -63,3 +63,8 @@ src/plugins/impeccable-live.client.ts
 # impeccable-live-ignore-end
 
 .vercel
+
+# Auditoría / notas de sesión / artefactos de herramienta (no código)
+.kombai/
+lighthouse-report*.json
+session-*.md
