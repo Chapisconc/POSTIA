@@ -38,15 +38,20 @@
 }
 
 /* ---- Tipografía ---- */
-:root,
-[data-font='plus-jakarta-sans'] {
-  --font-sans: 'Plus Jakarta Sans Variable', system-ui, -apple-system, sans-serif;
+/* Una sola familia (Inter Variable) para consistencia y bundle ligero.
+   Fallback a system-ui siempre presente. El selector de fuente en Apariencia
+   queda como Inter (no se cargan otras familias). */
+:root {
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
-[data-font='inter'] { --font-sans: 'Inter Variable', system-ui, -apple-system, sans-serif; }
-[data-font='manrope'] { --font-sans: 'Manrope Variable', system-ui, -apple-system, sans-serif; }
-[data-font='dm-sans'] { --font-sans: 'DM Sans Variable', system-ui, -apple-system, sans-serif; }
-[data-font='geist'] { --font-sans: 'Geist Variable', system-ui, -apple-system, sans-serif; }
-[data-font='ibm-plex-sans'] { --font-sans: 'IBM Plex Sans Variable', system-ui, -apple-system, sans-serif; }
+[data-font='inter'],
+[data-font='plus-jakarta-sans'],
+[data-font='manrope'],
+[data-font='dm-sans'],
+[data-font='geist'],
+[data-font='ibm-plex-sans'] {
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
 
 :root { --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', 'Consolas', monospace; }
 

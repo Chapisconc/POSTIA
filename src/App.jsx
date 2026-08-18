@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, Suspense, lazy } from 'react'
 import { readState, getCurrentUser, login, writeState } from './lib/storage'
 import { seedIfEmpty } from './lib/seed'
 import { ToastViewport, Button, Input } from './components/ui'
@@ -7,36 +7,38 @@ import { soundOk } from './lib/sound'
 import { toast } from './lib/notify'
 import { verifyConnection, startRealtimeSync, loadStateFromSupabase, syncFullStateToSupabase, toCamel } from './lib/supabase-client'
 
-import Dashboard from './components/dashboard/Dashboard'
-import POS from './components/pos/POS'
-import Pedidos from './components/orders/Pedidos'
-import Mesas from './components/tables/Mesas'
-import Cocina from './components/kitchen/Cocina'
-import Domicilios from './components/delivery/Domicilios'
-import Productos from './components/catalog/Productos'
-import Categorias from './components/catalog/Categorias'
-import Modificadores from './components/catalog/Modificadores'
-import Inventario from './components/inventory/Inventario'
-import Clientes from './components/clients/Clientes'
-import Caja from './components/cash/Caja'
-import Jornadas from './components/cash/Jornadas'
-import Gastos from './components/cash/Gastos'
-import Reportes from './components/reports/Reportes'
-import HistorialPedidos from './components/ventas/HistorialPedidos'
-import Marketing from './components/growth/Marketing'
-import MenuDigital from './components/growth/MenuDigital'
-import Cupones from './components/growth/Cupones'
-import Fidelidad from './components/growth/Fidelidad'
-import Automatizaciones from './components/growth/Automatizaciones'
-import Repartidores from './components/delivery/Repartidores'
-import Equipo from './components/admin/Equipo'
-import Impresion from './components/admin/Impresion'
-import PagosCfg from './components/admin/PagosCfg'
-import NotificacionesCfg from './components/admin/NotificacionesCfg'
-import Apariencia from './components/admin/Apariencia'
-import Auditoria from './components/admin/Auditoria'
-import SettingsPage from './components/admin/SettingsPage'
-import MenuPage from './MenuPage'
+// Lazy loading (Fase 1 #29): cada módulo es un chunk aparte. El cajero que entra a
+// POS no descarga Marketing/Auditoría/Fidelidad de inmediato. Reduce el JS inicial.
+const Dashboard = lazy(() => import('./components/dashboard/Dashboard'))
+const POS = lazy(() => import('./components/pos/POS'))
+const Pedidos = lazy(() => import('./components/orders/Pedidos'))
+const Mesas = lazy(() => import('./components/tables/Mesas'))
+const Cocina = lazy(() => import('./components/kitchen/Cocina'))
+const Domicilios = lazy(() => import('./components/delivery/Domicilios'))
+const Productos = lazy(() => import('./components/catalog/Productos'))
+const Categorias = lazy(() => import('./components/catalog/Categorias'))
+const Modificadores = lazy(() => import('./components/catalog/Modificadores'))
+const Inventario = lazy(() => import('./components/inventory/Inventario'))
+const Clientes = lazy(() => import('./components/clients/Clientes'))
+const Caja = lazy(() => import('./components/cash/Caja'))
+const Jornadas = lazy(() => import('./components/cash/Jornadas'))
+const Gastos = lazy(() => import('./components/cash/Gastos'))
+const Reportes = lazy(() => import('./components/reports/Reportes'))
+const HistorialPedidos = lazy(() => import('./components/ventas/HistorialPedidos'))
+const Marketing = lazy(() => import('./components/growth/Marketing'))
+const MenuDigital = lazy(() => import('./components/growth/MenuDigital'))
+const Cupones = lazy(() => import('./components/growth/Cupones'))
+const Fidelidad = lazy(() => import('./components/growth/Fidelidad'))
+const Automatizaciones = lazy(() => import('./components/growth/Automatizaciones'))
+const Repartidores = lazy(() => import('./components/delivery/Repartidores'))
+const Equipo = lazy(() => import('./components/admin/Equipo'))
+const Impresion = lazy(() => import('./components/admin/Impresion'))
+const PagosCfg = lazy(() => import('./components/admin/PagosCfg'))
+const NotificacionesCfg = lazy(() => import('./components/admin/NotificacionesCfg'))
+const Apariencia = lazy(() => import('./components/admin/Apariencia'))
+const Auditoria = lazy(() => import('./components/admin/Auditoria'))
+const SettingsPage = lazy(() => import('./components/admin/SettingsPage'))
+const MenuPage = lazy(() => import('./MenuPage'))
 
 const MODULES = {
   inicio: Dashboard, pos: POS, pedidos: Pedidos, mesas: Mesas, cocina: Cocina, domicilios: Domicilios,
@@ -46,6 +48,17 @@ const MODULES = {
   repartidores: Repartidores,
   equipo: Equipo, impresion: Impresion, pagos: PagosCfg, notificaciones: NotificacionesCfg,
   apariencia: Apariencia, auditoria: Auditoria, configuracion: SettingsPage,
+}
+
+// Fallback ligero mientras carga el chunk de un módulo.
+function PageSkeleton() {
+  return (
+    <div className="p-6 space-y-4 animate-pulse">
+      <div className="h-8 w-48 rounded-lg bg-line" />
+      <div className="h-40 rounded-xl bg-line" />
+      <div className="h-40 rounded-xl bg-line" />
+    </div>
+  )
 }
 
 function isMenuMode() {
@@ -258,7 +271,9 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-page">
       <AppShell tab={tab} onNav={onNav} state={state} user={user} onRequestLogin={() => setShowLogin(true)}>
-        <ActiveModule state={state} refresh={refresh} onNav={onNav} params={params} user={user} />
+        <Suspense fallback={<PageSkeleton />}>
+          <ActiveModule state={state} refresh={refresh} onNav={onNav} params={params} user={user} />
+        </Suspense>
       </AppShell>
 
       {/* Login */}
