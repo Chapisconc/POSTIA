@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { Settings, QrCode, ShoppingCart, Truck, Users, CreditCard, Clock, ArrowRight, Eye, Store, Package, Heart } from 'lucide-react'
+import { QrCode, ShoppingCart, Truck, Users, CreditCard, ArrowRight, Eye, Store, Package, Heart } from 'lucide-react'
 import { Button, Field, Input, Toggle, PageHeader } from '../ui'
-import { fmtMoney } from '../../lib/format'
+
 
 // Estado local (no persistido aún)
 const DEFAULT = {

@@ -1,6 +1,6 @@
 // Picker unificado de producto: modos búsqueda + selección directa.
 import React, { useState, useMemo } from 'react'
-import { Button, SearchInput, EmptyState, QtyStepper } from '../ui'
+import { SearchInput, EmptyState } from '../ui'
 import ModifierPicker from './ModifierPicker'
 import { fmtMoney } from '../../lib/format'
 

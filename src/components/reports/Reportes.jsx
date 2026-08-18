@@ -385,7 +385,7 @@ export default function Reportes({ state, refresh, onNav, params, user }) {
                 <tfoot>
                   <tr>
                     <td className="pt-3 font-bold text-night">Total</td>
-                    <td className="pt-3 text-right font-mono font-extrabold text-brand">{fmtMoney(payTotal)}</td>
+                    <td className="pt-3 text-right font-mono font-extrabold text-brand dark:text-night">{fmtMoney(payTotal)}</td>
                     <td className="pt-3 text-right font-mono text-muted">100%</td>
                   </tr>
                 </tfoot>
@@ -419,7 +419,7 @@ export default function Reportes({ state, refresh, onNav, params, user }) {
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="font-mono text-sm font-bold text-brand">{fmtMoney(p.revenue)}</div>
+                    <div className="font-mono text-sm font-bold text-brand dark:text-night">{fmtMoney(p.revenue)}</div>
                     <div className="text-[11px] text-muted font-mono">{Math.round((p.revenue / topRev) * 100)}%</div>
                   </div>
                 </div>
@@ -443,7 +443,7 @@ export default function Reportes({ state, refresh, onNav, params, user }) {
                 <div key={c.categoryId}>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="font-semibold text-night">{c.name}</span>
-                    <span className="font-mono text-muted">{fmtNum(c.qty)} ud · <span className="font-bold text-brand">{fmtMoney(c.revenue)}</span></span>
+                    <span className="font-mono text-muted">{fmtNum(c.qty)} ud · <span className="font-bold text-brand dark:text-night">{fmtMoney(c.revenue)}</span></span>
                   </div>
                   <div className="h-3 bg-line rounded-full overflow-hidden">
                     <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${Math.max(4, (c.revenue / maxCat) * 100)}%` }} />
@@ -662,7 +662,7 @@ export default function Reportes({ state, refresh, onNav, params, user }) {
                       </td>
                       <td className="py-2.5 text-right font-mono">{fmtNum(c.ordersCount)}</td>
                       <td className="py-2.5 text-right font-mono text-muted">{fmtMoney(c.avgTicket)}</td>
-                      <td className="py-2.5 text-right font-mono font-bold text-brand">{fmtMoney(c.totalSpent)}</td>
+                      <td className="py-2.5 text-right font-mono font-bold text-brand dark:text-night">{fmtMoney(c.totalSpent)}</td>
                       <td className="py-2.5 text-right text-xs text-muted">{c.lastOrder ? fmtDate(c.lastOrder) : '—'}</td>
                     </tr>
                   ))}

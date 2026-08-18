@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { X, Plus, Percent, Box, HandCoins, Printer, Check } from 'lucide-react'
+import { X, Plus, Percent, Box, HandCoins, Printer, Check, Lock } from 'lucide-react'
 import { Button, Badge, Field, Input, Select, QtyStepper, Segmented, SearchInput, EmptyState } from '../ui'
 import { ServiceBadge, OrderStatusBadge } from '../shared/StatusBadge'
 import ClientSelect from '../pos/ClientSelect'
@@ -9,7 +9,7 @@ import { toast, toastOk, toastErr } from '../../lib/notify'
 import { printTicket } from '../../lib/ticket'
 import {
   updateOrder, updateOrderItem, removeOrderItem, setOrderStatus, findOrCreateClient, freeTable,
-  addItemsToOrder, buildItem,
+  addItemsToOrder, buildItem, acquireOrderLock, releaseOrderLock, isOrderLocked,
 } from '../../lib/storage'
 
 const SERVICE_OPTIONS = [
@@ -70,9 +70,26 @@ export default function OrderDrawer({ order, state, user, refresh, onClose, onPa
     return () => document.removeEventListener('keydown', handleEscape)
   }, [onClose])
 
+  // Acquire lock when drawer opens, release on close
+  useEffect(() => {
+    if (!order?.id) return
+    acquireOrderLock(order.id, user)
+    return () => { releaseOrderLock(order.id) }
+  }, [order?.id])
+
+  // Heartbeat: refresh lock every 2 min while drawer is open
+  useEffect(() => {
+    if (!order?.id) return
+    const t = setInterval(() => acquireOrderLock(order.id, user), 2 * 60 * 1000)
+    return () => clearInterval(t)
+  }, [order?.id])
+
+  const lockState = isOrderLocked(liveOrder || order, user)
+  const isLockedByOther = lockState.locked
+
   const terminal = order.status === 'finalizado' || order.status === 'cancelado'
-  const isEditable = !order.paid && !terminal && canEdit
-  const canPayBtn = canPay && !order.paid && (order.status === 'listo' || order.status === 'porcobrar')
+  const isEditable = !order.paid && !terminal && canEdit && !isLockedByOther
+  const canPayBtn = canPay && !order.paid && (order.status === 'listo' || order.status === 'porcobrar') && !isLockedByOther
   const serviceType = order.serviceType || 'mostrador'
   const mesaGroups = state.salons.map((salon) => ({
     salon,
@@ -89,6 +106,7 @@ export default function OrderDrawer({ order, state, user, refresh, onClose, onPa
   const packNum = parseFloat(packCost) || 0
   const deliveryNum = parseFloat(deliveryCost) || 0
   const total = Math.max(0, subtotal - manualDisc + tipNum + deliveryNum + packNum)
+  const itemCount = order.items.reduce((a, i) => a + (Number(i.qty) || 1), 0)
 
   const products = state.products.filter((p) => p.available !== false && (!productQ.trim() || p.name.toLowerCase().includes(productQ.trim().toLowerCase())))
 
@@ -234,8 +252,8 @@ export default function OrderDrawer({ order, state, user, refresh, onClose, onPa
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
-      <div className="absolute inset-0 bg-night" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-card shadow-2xl flex flex-col animate-pop text-night h-screen overflow-hidden">
+      <div className="absolute inset-0 bg-night/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl bg-card shadow-2xl flex flex-col animate-pop text-night h-screen overflow-hidden">
         {/* Header de marca */}
         <div className="bg-brand text-white px-6 py-5 shrink-0">
           <div className="flex items-center gap-4">
@@ -255,6 +273,15 @@ export default function OrderDrawer({ order, state, user, refresh, onClose, onPa
 
         {/* Cuerpo del pedido */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5 min-h-0">
+          {isLockedByOther && (
+            <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-4 py-3 text-sm">
+              <Lock size={18} className="text-amber-600 dark:text-amber-400 shrink-0" />
+              <div>
+                <span className="font-semibold text-amber-800 dark:text-amber-300">Pedido bloqueado</span>
+                <span className="text-amber-700 dark:text-amber-400 ml-1">{lockState.by} lo está editando</span>
+              </div>
+            </div>
+          )}
           {isEditable && (
             <Segmented className="!p-0.5" options={SERVICE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} value={serviceType} onChange={changeService} />
           )}
@@ -338,7 +365,7 @@ export default function OrderDrawer({ order, state, user, refresh, onClose, onPa
                               className="text-left rounded-lg border border-line bg-card p-2.5 hover:border-brand hover:bg-brand-soft transition">
                               <div className="text-xl leading-none">{p.emoji}</div>
                               <div className="text-xs font-semibold text-night leading-tight mt-1.5 line-clamp-2">{p.name}</div>
-                              <div className="text-xs font-mono text-brand font-semibold mt-1">{fmtMoney(p.price)}</div>
+                              <div className="text-xs font-mono text-brand dark:text-night font-semibold mt-1">{fmtMoney(p.price)}</div>
                             </button>
                           ))}
                         </div>
@@ -490,7 +517,7 @@ export default function OrderDrawer({ order, state, user, refresh, onClose, onPa
 
           <div className="flex items-end justify-between gap-4 border-t border-line pt-4">
             <div className="text-sm text-muted">
-              {order.items.length} artículo{order.items.length === 1 ? '' : 's'}
+              {itemCount} artículo{itemCount === 1 ? '' : 's'}
               <Badge tone={order.paid ? 'success' : 'amber'} className="block mt-1.5 w-fit">{order.paid ? 'Pagado' : 'No pagado'}</Badge>
             </div>
             <div className="flex items-end gap-4">

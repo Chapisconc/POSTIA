@@ -108,7 +108,7 @@ export default function Fidelidad({ state, refresh }) {
       {birthdays.length > 0 && (
         <Card className="p-4 border-l-4 border-l-pink-400">
           <div className="flex items-center gap-2 font-semibold text-night mb-2">
-            <Cake size={16} className="text-pink-500" /> Cumpleaños de {monthName}
+            <Cake size={16} className="text-brand" /> Cumpleaños de {monthName}
           </div>
           <div className="flex flex-wrap gap-2">
             {birthdays.map((c) => (

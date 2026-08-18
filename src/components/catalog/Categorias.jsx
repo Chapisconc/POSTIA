@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { Tags, Plus, Pencil, Trash2, Star, Package } from 'lucide-react'
 import {
-  Card, Button, Badge, Field, Input, Modal, ConfirmDialog,
+  Card, Button, Modal, ConfirmDialog,
   Toggle, EmptyState, PageHeader,
 } from '../ui'
 import { addCategory, updateCategory, deleteCategory } from '../../lib/storage'
@@ -107,10 +107,19 @@ export default function Categorias({ state, refresh, onNav }) {
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? `Editar: ${editing.name}` : 'Nueva categoría'}>
         <div className="space-y-4">
+          <div className="rounded-xl bg-page/60 border border-line p-3.5">
+            <p className="type-caption text-muted">
+              Una categoría agrupa productos similares en el menú, como <strong className="text-night">Tacos</strong>, <strong className="text-night">Bebidas</strong> o <strong className="text-night">Postres</strong>.
+              Se mostrarán como pestañas en la pantalla POS y en el menú digital.
+            </p>
+          </div>
+
           <Field label="Nombre *">
-            <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Ej. Alitas" />
+            <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Ej. Alitas, Tacos, Bebidas…" />
+            <p className="type-caption text-muted mt-1">Nombre que aparecerá en el POS y el menú digital.</p>
           </Field>
-          <Field label="Emoji">
+
+          <Field label="Emoji (icono)">
             <div className="flex flex-wrap gap-1">
               {EMOJIS.map((e) => (
                 <button key={e} type="button" onClick={() => set('emoji', e)}
@@ -119,8 +128,18 @@ export default function Categorias({ state, refresh, onNav }) {
                 </button>
               ))}
             </div>
+            <p className="type-caption text-muted mt-1">Selecciona un emoji que represente visualmente esta categoría.</p>
           </Field>
-          <Toggle checked={form.featured} onChange={(v) => set('featured', v)} label="Categoría destacada (aparece primero en el menú)" />
+
+          <Field label="Destacada">
+            <Toggle
+              checked={form.featured}
+              onChange={(v) => set('featured', v)}
+              label="Categoría destacada"
+            />
+            <p className="type-caption text-muted mt-1">Las destacadas aparecen primero en el POS y en el menú digital.</p>
+          </Field>
+
           <div className="flex gap-2 justify-end border-t border-line pt-3">
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
             <Button onClick={save}><Tags size={16} className="mr-1" /> {editing ? 'Guardar cambios' : 'Crear categoría'}</Button>

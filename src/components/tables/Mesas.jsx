@@ -34,9 +34,9 @@ function MesaCard({ table, order, onOpen, onEdit, onDelete }) {
     <div onClick={onOpen}
       className={`relative rounded-2xl border-2 text-center py-3 px-2 w-full cursor-pointer transition hover:-translate-y-0.5 hover:shadow-lg ${CARD_STYLE[st] || CARD_STYLE.libre}`}>
       <span onClick={(e) => { e.stopPropagation(); onEdit() }} title="Editar mesa"
-        className="absolute top-1.5 left-1.5 grid place-items-center w-6 h-6 rounded-lg bg-black/10 hover:bg-black/20 cursor-pointer"><Pencil size={11} /></span>
+        className="absolute top-1.5 left-1.5 grid place-items-center w-7 h-7 rounded-lg bg-black/10 hover:bg-black/20 cursor-pointer touch-icon"><Pencil size={11} /></span>
       <span onClick={(e) => { e.stopPropagation(); onDelete() }} title="Eliminar mesa"
-        className="absolute top-1.5 right-1.5 grid place-items-center w-6 h-6 rounded-lg bg-black/10 hover:bg-black/20 cursor-pointer"><Trash2 size={11} /></span>
+        className="absolute top-1.5 right-1.5 grid place-items-center w-7 h-7 rounded-lg bg-black/10 hover:bg-black/20 cursor-pointer touch-icon"><Trash2 size={11} /></span>
       <div className="font-extrabold text-2xl leading-tight">{num}</div>
       {st === 'libre' && <div className="text-[10px] font-black mt-1 tracking-[0.2em]">LIBRE</div>}
       {st !== 'libre' && order && (
@@ -186,49 +186,50 @@ export default function Mesas({ state, refresh, onNav, params, user }) {
       </div>
 
       {state.salons.length === 0 ? (
-        <Card className="p-6">
+        <Card className="flex-1 flex flex-col items-center justify-center p-6">
           <EmptyState icon="🪑" title="Sin salones" message="Crea tu primer salón para comenzar a dar de alta mesas."
             action={<Button onClick={() => openForm('salon', 'add', { name: '' })}><Plus size={15} className="mr-1" /> Crear salón</Button>} />
         </Card>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 mb-4">
             <div className="flex-1 min-w-0">
               <Tabs items={state.salons.map((s) => ({ id: s.id, label: s.name }))} value={activeSalon.id} onChange={setSalonId} />
             </div>
             <span className="flex gap-1 shrink-0">
               <span title="Editar salón" onClick={() => openForm('salon', 'edit', { id: activeSalon.id, name: activeSalon.name })}
-                className="grid place-items-center w-9 h-9 rounded-xl border border-line bg-card text-night hover:bg-page cursor-pointer"><Pencil size={15} /></span>
+                className="grid place-items-center w-9 h-9 rounded-xl border border-line bg-card text-night hover:bg-page cursor-pointer touch-icon"><Pencil size={15} /></span>
               <span title="Eliminar salón" onClick={() => setDelConfirm({ type: 'salon', id: activeSalon.id, name: activeSalon.name })}
-                className="grid place-items-center w-9 h-9 rounded-xl border border-line bg-card text-danger hover:bg-danger-soft cursor-pointer"><Trash2 size={15} /></span>
+                className="grid place-items-center w-9 h-9 rounded-xl border border-line bg-card text-danger hover:bg-danger-soft cursor-pointer touch-icon"><Trash2 size={15} /></span>
             </span>
           </div>
 
-          {tables.length === 0 ? (
-            <Card className="p-6">
-              <EmptyState icon="🪑" title={`Sin mesas en ${activeSalon.name}`}
-                message="Agrega mesas a este salón."
-                action={<Button onClick={() => openForm('table', 'add', { name: '', capacity: 4, salonId: activeSalon.id })}><Plus size={15} className="mr-1" /> Agregar mesa</Button>} />
-            </Card>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
-              {tables.map((t) => (
-                <MesaCard key={t.id} table={t} order={state.orders.find((o) => o.id === t.orderId) || state.orders.find((o) => o.tableId === t.id && !['finalizado', 'cancelado'].includes(o.status))}
-                  onOpen={() => {
-                    const linkedOrder = state.orders.find((o) => o.id === t.orderId) || state.orders.find((o) => o.tableId === t.id && !['finalizado', 'cancelado'].includes(o.status))
-                    if (linkedOrder) {
-                      setSelected(t)
-                    } else {
-                      // Sin pedido: abrir POS directamente con la mesa
-                      if (t.status === 'libre') { try { updateTable(t.id, { status: 'ocupada' }) } catch (e) { console.error('Error:', e); toastErr('Error') } }
-                      onNav('pos', { tableId: t.id })
-                    }
-                  }}
-                  onEdit={() => openForm('table', 'edit', { id: t.id, name: t.name, capacity: t.capacity, salonId: t.salonId })}
-                  onDelete={() => setDelConfirm({ type: 'table', id: t.id, name: t.name })} />
-              ))}
-            </div>
-          )}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {tables.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-6">
+                <EmptyState icon="🪑" title={`Sin mesas en ${activeSalon.name}`}
+                  message="Agrega mesas a este salón."
+                  action={<Button onClick={() => openForm('table', 'add', { name: '', capacity: 4, salonId: activeSalon.id })}><Plus size={15} className="mr-1" /> Agregar mesa</Button>} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3 min-h-full">
+                {tables.map((t) => (
+                  <MesaCard key={t.id} table={t} order={state.orders.find((o) => o.id === t.orderId) || state.orders.find((o) => o.tableId === t.id && !['finalizado', 'cancelado'].includes(o.status))}
+                    onOpen={() => {
+                      const linkedOrder = state.orders.find((o) => o.id === t.orderId) || state.orders.find((o) => o.tableId === t.id && !['finalizado', 'cancelado'].includes(o.status))
+                      if (linkedOrder) {
+                        setSelected(t)
+                      } else {
+                        if (t.status === 'libre') { try { updateTable(t.id, { status: 'ocupada' }) } catch (e) { console.error('Error:', e); toastErr('Error') } }
+                        onNav('pos', { tableId: t.id })
+                      }
+                    }}
+                    onEdit={() => openForm('table', 'edit', { id: t.id, name: t.name, capacity: t.capacity, salonId: t.salonId })}
+                    onDelete={() => setDelConfirm({ type: 'table', id: t.id, name: t.name })} />
+                ))}
+              </div>
+            )}
+          </div>
         </>
       )}
 

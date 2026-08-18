@@ -75,7 +75,7 @@ export default function MenuPage({ state }) {
                 <div className="text-4xl mb-2">{p.emoji}</div>
                 <div className="font-bold text-night text-sm leading-tight">{p.name}</div>
                 <div className="text-xs text-muted mb-2 line-clamp-2">{p.description}</div>
-                <div className="font-mono font-extrabold text-brand text-sm">{fmtMoney(p.price)}</div>
+                <div className="font-mono font-extrabold text-brand dark:text-night text-sm">{fmtMoney(p.price)}</div>
                 {md.mode === 'order' ? (
                   inCart > 0 ? (
                     <div className="mt-2 flex items-center justify-between">
@@ -119,7 +119,7 @@ export default function MenuPage({ state }) {
               </div>
             ))}
             {deliveryCost > 0 && <div className="flex justify-between text-sm px-3"><span className="text-muted">Envío</span><span className="font-mono">{fmtMoney(deliveryCost)}</span></div>}
-            <div className="flex justify-between text-sm font-bold px-3"><span>Total</span><span className="font-mono text-brand">{fmtMoney(total)}</span></div>
+            <div className="flex justify-between text-sm font-bold px-3"><span>Total</span>              <span className="font-mono text-brand dark:text-night">{fmtMoney(total)}</span></div>
           </div>
 
           <div className="flex gap-2">

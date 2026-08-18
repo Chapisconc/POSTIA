@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react'
-import { readState, getCurrentUser, login } from './lib/storage'
+import { readState, getCurrentUser, login, writeState } from './lib/storage'
 import { seedIfEmpty } from './lib/seed'
 import { ToastViewport, Button, Input } from './components/ui'
 import AppShell from './components/layout/AppShell'
 import { soundOk } from './lib/sound'
 import { toast } from './lib/notify'
-import { verifyConnection, startRealtimeSync, loadStateFromSupabase, syncFullStateToSupabase } from './lib/supabase-client'
+import { verifyConnection, startRealtimeSync, loadStateFromSupabase, syncFullStateToSupabase, toCamel } from './lib/supabase-client'
 
 import Dashboard from './components/dashboard/Dashboard'
 import POS from './components/pos/POS'
@@ -69,8 +69,12 @@ export default function App() {
     return () => clearInterval(t)
   }, [])
 
-  // Intentar conectar a Supabase y iniciar realtime sync al montar
+  // Intentar conectar a Supabase y iniciar realtime sync al montar.
+  // El realtime DEBE iniciarse SIEMPRE (aunque falle la carga inicial) para que
+  // los cambios en un dispositivo se reflejen al instante en los demás.
   useEffect(() => {
+    let cleanup = null
+    let pollTimer = null
     async function initSupabase() {
       try {
         const connected = await verifyConnection()
@@ -78,70 +82,160 @@ export default function App() {
           console.log('Supabase no disponible, usando localStorage')
           return
         }
-        // Cargar state desde Supabase y sincronizar si hay datos
-        const remoteState = await loadStateFromSupabase()
-        if (remoteState && remoteState.orders && remoteState.orders.length > 0) {
-          const local = readState()
-          // Merge: cada colección gana la versión con el updated_at más reciente por registro
-          const mergeCollection = (localArr = [], remoteArr = []) => {
-            const merged = new Map()
-            for (const item of localArr) merged.set(item.id, item)
-            for (const item of remoteArr) {
-              const existing = merged.get(item.id)
-              if (!existing || (item.updatedAt || '').localeCompare(existing.updatedAt || '') > 0) {
-                merged.set(item.id, item)
+        // Carga inicial best-effort: NO debe bloquear el arranque del realtime
+        try {
+          const remoteState = await loadStateFromSupabase()
+          const hasRemoteData = remoteState && (
+            (remoteState.orders?.length || 0) + (remoteState.products?.length || 0) +
+            (remoteState.categories?.length || 0) + (remoteState.users?.length || 0) > 0
+          )
+          if (hasRemoteData) {
+            const local = readState()
+            const mergeCollection = (localArr = [], remoteArr = []) => {
+              const merged = new Map()
+              for (const item of localArr) merged.set(item.id, item)
+              for (const item of remoteArr) {
+                const existing = merged.get(item.id)
+                if (!existing || (item.updatedAt || '').localeCompare(existing.updatedAt || '') > 0) {
+                  merged.set(item.id, item)
+                }
               }
+              return [...merged.values()]
             }
-            return [...merged.values()]
+            const merged = {
+              ...local,
+              orders: mergeCollection(local.orders, remoteState.orders),
+              products: mergeCollection(local.products, remoteState.products),
+              categories: mergeCollection(local.categories, remoteState.categories),
+              tables: mergeCollection(local.tables, remoteState.tables),
+              clients: mergeCollection(local.clients, remoteState.clients),
+              riders: mergeCollection(local.riders, remoteState.riders),
+              users: mergeCollection(local.users, remoteState.users),
+              modGroups: mergeCollection(local.modGroups, remoteState.modGroups),
+              coupons: mergeCollection(local.coupons, remoteState.coupons),
+              campaigns: mergeCollection(local.campaigns, remoteState.campaigns),
+              salons: mergeCollection(local.salons, remoteState.salons),
+              menuDigital: remoteState.menuDigital
+                ? (local.menuDigital?.updatedAt && remoteState.menuDigital.updatedAt && local.menuDigital.updatedAt > remoteState.menuDigital.updatedAt
+                    ? local.menuDigital : remoteState.menuDigital)
+                : local.menuDigital,
+            }
+            if (remoteState.settings) merged.settings = remoteState.settings
+            setState(merged)
+            writeState(merged)
+          } else {
+            const local = readState()
+            await syncFullStateToSupabase(local)
           }
-          const merged = {
-            ...local,
-            orders: mergeCollection(local.orders, remoteState.orders),
-            products: mergeCollection(local.products, remoteState.products),
-            categories: mergeCollection(local.categories, remoteState.categories),
-            tables: mergeCollection(local.tables, remoteState.tables),
-            clients: mergeCollection(local.clients, remoteState.clients),
-            riders: mergeCollection(local.riders, remoteState.riders),
-            users: mergeCollection(local.users, remoteState.users),
-          }
-          setState(merged)
-          toast('Conectado a Supabase', 'success')
-        } else {
-          const local = readState()
-          await syncFullStateToSupabase(local)
+        } catch (e) {
+          console.error('Carga inicial Supabase omitida:', e.message)
         }
-        // Iniciar realtime sync para recibir cambios de otros dispositivos
-        const cleanup = startRealtimeSync((payload) => {
+        // REALTIME: se suscribe SIEMPRE (independiente de la carga inicial).
+        // Nota: el realtime de Supabase puede no entregar eventos de forma fiable en
+        // algunas configuraciones locales; el polling de abajo es la garantía de sync.
+        cleanup = startRealtimeSync((payload) => {
           const { eventType, new: newRecord, old: oldRecord } = payload
-          if (eventType === 'INSERT' && newRecord) {
-            // Un pedido nuevo fue creado en otro dispositivo
-            setState(prev => {
-              if (!prev.orders.some(o => o.id === newRecord.id)) {
-                return { ...prev, orders: [...prev.orders, newRecord] }
+          const key = TABLE_TO_KEY[payload.table]
+          if (!key) return
+          setState(prev => {
+            if (key === 'settings') {
+              return eventType === 'DELETE' ? prev : { ...prev, settings: toCamel(newRecord) }
+            }
+            if (key === 'menuDigital') {
+              return eventType === 'DELETE' ? prev : { ...prev, menuDigital: toCamel(newRecord) }
+            }
+            if (eventType === 'INSERT' && newRecord) {
+              const rec = toCamel(newRecord)
+              if (!prev[key].some(x => x.id === rec.id)) {
+                if (key === 'orders') {
+                  const dup = prev[key].find(x => x.folio === rec.folio && x.folioDate === rec.folioDate)
+                  if (dup) return { ...prev, [key]: prev[key].map(x => x.folio === rec.folio && x.folioDate === rec.folioDate ? rec : x) }
+                }
+                return { ...prev, [key]: [...prev[key], rec] }
               }
               return prev
-            })
-            toast(`Nuevo pedido #${newRecord.folio}`, 'info')
-          } else if (eventType === 'UPDATE' && newRecord) {
-            // Un pedido fue actualizado (estado, cobro, etc.)
-            setState(prev => ({
-              ...prev,
-              orders: prev.orders.map(o => o.id === newRecord.id ? { ...o, ...newRecord } : o)
-            }))
-          } else if (eventType === 'DELETE' && oldRecord) {
-            // Un pedido fue eliminado
-            setState(prev => ({
-              ...prev,
-              orders: prev.orders.filter(o => o.id !== oldRecord.id)
-            }))
+            }
+            if (eventType === 'UPDATE' && newRecord) {
+              const rec = toCamel(newRecord)
+              const matchId = (x) => x.id === rec.id
+              const matchFolio = key === 'orders' ? (x) => x.folio === rec.folio && x.folioDate === rec.folioDate : null
+              return { ...prev, [key]: prev[key].map(x => (matchId(x) || (matchFolio && matchFolio(x))) ? rec : x) }
+            }
+            if (eventType === 'DELETE' && oldRecord) {
+              const oldRec = toCamel(oldRecord)
+              return { ...prev, [key]: prev[key].filter(x => x.id !== oldRec.id) }
+            }
+            return prev
+          })
+          if (key === 'orders') {
+            const rec = newRecord ? toCamel(newRecord) : null
+            const oldRec = oldRecord ? toCamel(oldRecord) : null
+            if (eventType === 'INSERT' && rec) {
+              toast(`Nuevo pedido #${rec.folio}`, 'info')
+            } else if (eventType === 'UPDATE' && rec) {
+              if (rec.paid && (!oldRec || !oldRec.paid)) {
+                toast(`Pedido #${rec.folio} cobrado`, 'success')
+              } else if (rec.status === 'cancelado' && (!oldRec || oldRec.status !== 'cancelado')) {
+                toast(`Pedido #${rec.folio} cancelado`, 'error')
+              } else if (oldRec && rec.status && rec.status !== oldRec.status) {
+                toast(`Pedido #${rec.folio} → ${rec.status}`, 'info')
+              }
+            } else if (eventType === 'DELETE' && oldRec) {
+              toast(`Pedido #${oldRec.folio} eliminado`, 'warning')
+            }
           }
         })
-        return () => cleanup && cleanup()
+        // POLLING de respaldo: garantiza que los cambios en un dispositivo se reflejen
+        // en los demás aunque el realtime de Supabase no entregue eventos. Fusiona solo
+        // lo que cambió (por updatedAt) para no provocar re-renders innecesarios.
+        const mergeRemote = (prev, remote) => {
+          const mergeCollection = (localArr = [], remoteArr = []) => {
+            const m = new Map()
+            for (const it of localArr) m.set(it.id, it)
+            for (const it of remoteArr) {
+              const ex = m.get(it.id)
+              if (!ex || (it.updatedAt || '').localeCompare(ex.updatedAt || '') > 0) m.set(it.id, it)
+            }
+            return [...m.values()]
+          }
+          const next = {
+            ...prev,
+            orders: mergeCollection(prev.orders, remote.orders || []),
+            products: mergeCollection(prev.products, remote.products || []),
+            categories: mergeCollection(prev.categories, remote.categories || []),
+            tables: mergeCollection(prev.tables, remote.tables || []),
+            clients: mergeCollection(prev.clients, remote.clients || []),
+            riders: mergeCollection(prev.riders, remote.riders || []),
+            users: mergeCollection(prev.users, remote.users || []),
+            modGroups: mergeCollection(prev.modGroups, remote.modGroups || []),
+            coupons: mergeCollection(prev.coupons, remote.coupons || []),
+            campaigns: mergeCollection(prev.campaigns, remote.campaigns || []),
+            salons: mergeCollection(prev.salons, remote.salons || []),
+          }
+          if (remote.menuDigital) next.menuDigital = remote.menuDigital
+          if (remote.settings) next.settings = remote.settings
+          // Detectar si algo cambió para evitar re-render
+          const changed =
+            JSON.stringify(next.orders.map(o => [o.id, o.status, o.paid, o.updatedAt]).sort()) !==
+            JSON.stringify(prev.orders.map(o => [o.id, o.status, o.paid, o.updatedAt]).sort()) ||
+            JSON.stringify(next.products.map(p => [p.id, p.updatedAt]).sort()) !==
+            JSON.stringify(prev.products.map(p => [p.id, p.updatedAt]).sort())
+          return changed ? next : prev
+        }
+        const pollRemote = async () => {
+          try {
+            const remote = await loadStateFromSupabase()
+            if (!remote) return
+            setState(prev => mergeRemote(prev, remote))
+          } catch { /* red intermitente: ignorar */ }
+        }
+        pollTimer = setInterval(pollRemote, 3000)
       } catch (e) {
         console.error('Supabase init error:', e.message)
       }
     }
     initSupabase().catch(e => console.error('Supabase error:', e))
+    return () => { if (cleanup) cleanup(); if (pollTimer) clearInterval(pollTimer) }
   }, [])
 
   const onNav = useCallback((id, p) => {

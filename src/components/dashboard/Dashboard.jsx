@@ -3,11 +3,11 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import {
-  Banknote, ShoppingCart, Receipt, Package, Clock, PlusCircle, UtensilsCrossed,
-  ChefHat, AlertTriangle, Bell, ArrowRight, Wallet,
+  Banknote, ShoppingCart, Receipt, Package, Clock, UtensilsCrossed,
+  ChefHat, Bell, ArrowRight, Wallet, PlusCircle,
 } from 'lucide-react'
 import { Card, StatCard, Badge, Button, EmptyState } from '../ui'
-import { fmtMoney, fmtNum, fmtTime } from '../../lib/format'
+import { fmtMoney, fmtNum } from '../../lib/format'
 import { todayStats, salesByHour, topProducts, rangeFrom } from '../../lib/stats'
 import { activeCaja, cajaSummary } from '../../lib/storage'
 
@@ -62,7 +62,7 @@ export default function Dashboard({ state, onNav }) {
           ].map((c) => (
             <button key={c.label} onClick={() => onNav(c.nav)}
               className="bg-page rounded-xl p-3 text-left hover:shadow-md transition hover:bg-line/60">
-              <div className={`text-2xl font-extrabold font-mono ${c.tone === 'blue' ? 'text-info-dark' : c.tone === 'amber' ? 'text-gold' : c.tone === 'brand' ? 'text-brand-dark' : c.tone === 'gold' ? 'text-gold' : c.tone === 'purple' ? 'text-brand' : 'text-night'}`}>{c.value}</div>
+              <div className={`text-2xl font-extrabold font-mono ${c.tone === 'blue' ? 'text-info-dark' : c.tone === 'amber' ? 'text-gold' : c.tone === 'brand' ? 'text-brand-dark dark:text-night' : c.tone === 'gold' ? 'text-gold' : c.tone === 'purple' ? 'text-brand' : 'text-night'}`}>{c.value}</div>
               <div className="text-[11px] text-muted font-medium mt-0.5">{c.label}</div>
             </button>
           ))}
@@ -78,7 +78,7 @@ export default function Dashboard({ state, onNav }) {
           <div className="flex flex-wrap gap-2">
             {alerts.slice(0, 8).map((a, i) => (
               <button key={i} onClick={() => onNav(a.nav)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${a.tone === 'danger' ? 'bg-danger-soft text-danger hover:bg-danger hover:text-white' : a.tone === 'blue' ? 'bg-info-soft text-info-dark hover:bg-info hover:text-white' : 'bg-gold-soft text-gold-dark hover:bg-gold hover:text-white'}`}>
+                className={`px-3 py-2 rounded-full text-sm font-medium transition touch-target ${a.tone === 'danger' ? 'bg-danger-soft text-danger hover:bg-danger hover:text-white' : a.tone === 'blue' ? 'bg-info-soft text-info-dark hover:bg-info hover:text-white' : 'bg-gold-soft text-gold-dark hover:bg-gold hover:text-white'}`}>
                 {a.icon} {a.text}
               </button>
             ))}
@@ -110,7 +110,7 @@ export default function Dashboard({ state, onNav }) {
         <Card className="p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold text-night">Más vendidos hoy</h3>
-            <button onClick={() => onNav('reportes')} className="text-xs font-semibold text-brand flex items-center gap-0.5 hover:underline">Ver reportes <ArrowRight size={12} /></button>
+            <button onClick={() => onNav('reportes')} className="text-xs font-semibold text-brand dark:text-night flex items-center gap-0.5 hover:underline">Ver reportes <ArrowRight size={12} /></button>
           </div>
           {top.length > 0 ? (
             <div className="space-y-3">
@@ -127,7 +127,7 @@ export default function Dashboard({ state, onNav }) {
                       <div className="h-full bg-brand rounded-full" style={{ width: `${Math.max(6, (p.qty / top[0].qty) * 100)}%` }} />
                     </div>
                   </div>
-                  <span className="font-mono text-sm font-bold text-brand">{fmtMoney(p.revenue)}</span>
+                  <span className="font-mono text-sm font-bold text-brand dark:text-night">{fmtMoney(p.revenue)}</span>
                 </div>
               ))}
             </div>
@@ -146,9 +146,9 @@ export default function Dashboard({ state, onNav }) {
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-2 text-center">
                 {[
-                  { label: 'Efectivo', v: cajaSummary(session).cashSales, c: 'text-brand-dark' },
+                  { label: 'Efectivo', v: cajaSummary(session).cashSales, c: 'text-brand-dark dark:text-night' },
                   { label: 'Tarjeta', v: cajaSummary(session).cardSales, c: 'text-info-dark' },
-                  { label: 'Transferencia', v: cajaSummary(session).transferSales, c: 'text-brand' },
+                  { label: 'Transferencia', v: cajaSummary(session).transferSales, c: 'text-brand dark:text-night' },
                 ].map((x) => (
                   <div key={x.label} className="bg-page rounded-xl p-2">
                     <div className="text-[10px] text-muted uppercase">{x.label}</div>
@@ -167,25 +167,6 @@ export default function Dashboard({ state, onNav }) {
           )}
         </Card>
       </div>
-
-      {/* Acciones rápidas */}
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <AlertTriangle size={16} className="text-gold" />
-          <h3 className="font-bold text-night">Acciones rápidas</h3>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          {quick.map((q) => {
-            const Icon = q.icon
-            return (
-              <button key={q.label} onClick={() => onNav(q.nav)}
-                className={`py-3 rounded-2xl font-bold text-sm flex flex-col items-center gap-1.5 transition shadow-sm ${q.cls}`}>
-                <Icon size={22} /> {q.label}
-              </button>
-            )
-          })}
-        </div>
-      </Card>
     </div>
   )
 }

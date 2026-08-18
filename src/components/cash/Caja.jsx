@@ -136,7 +136,7 @@ export default function Caja({ state, refresh, onNav, params, user }) {
                   <span className="text-muted">Contado</span>
                   <span className="font-mono font-semibold text-night">{fmtMoney(lastClosed.cashCounted)}</span>
                 </div>
-                <div className={`flex justify-between rounded-xl px-3 py-2 font-bold ${lastClosed.difference >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-danger-soft text-danger'}`}>
+                <div className={`flex justify-between rounded-xl px-3 py-2 font-bold ${lastClosed.difference >= 0 ? 'bg-success-soft text-success-dark' : 'bg-danger-soft text-danger'}`}>
                   <span>{lastClosed.difference >= 0 ? 'Sobrante' : 'Faltante'}</span>
                   <span className="font-mono">{lastClosed.difference >= 0 ? '+' : '−'}{fmtMoney(Math.abs(lastClosed.difference))}</span>
                 </div>
@@ -189,7 +189,7 @@ export default function Caja({ state, refresh, onNav, params, user }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-bold text-night text-lg">Caja abierta</h3>
-            <Badge tone="success"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> ABIERTA</Badge>
+            <Badge tone="success"><span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" /> ABIERTA</Badge>
           </div>
           <p className="text-xs text-muted mt-0.5">
             Abierta el {fmtDateTime(session.openedAt)} por <span className="font-semibold text-night">{session.openedBy}</span> · Fondo inicial {fmtMoney(session.openingCash)}
@@ -304,7 +304,7 @@ export default function Caja({ state, refresh, onNav, params, user }) {
                 <span className="text-muted truncate">{methodEmoji(v.method)} {methodLabel(v.method)}</span>
                 <span className="font-mono text-right">{fmtMoney(v.base)}</span>
                 <span className={`font-mono text-right ${v.commission > 0 ? 'text-danger' : 'text-muted'}`}>{v.commission > 0 ? `−${fmtMoney(v.commission)}` : '—'}</span>
-                <span className="font-mono font-bold text-right text-brand">{fmtMoney(v.charge)}</span>
+                <span className="font-mono font-bold text-right text-brand dark:text-night">{fmtMoney(v.charge)}</span>
               </div>
             ))}
           </div>

@@ -4,7 +4,7 @@ import {
   Card, Button, Field, Select, Toggle, PageHeader, StatCard,
 } from '../ui'
 import { fmtMoney } from '../../lib/format'
-import { toastOk, toastErr } from '../../lib/notify'
+import { toastOk } from '../../lib/notify'
 import { updateSettings, getSettings, nowISO } from '../../lib/storage'
 import { printTicket } from '../../lib/ticket'
 

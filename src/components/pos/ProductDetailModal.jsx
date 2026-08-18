@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Minus, Plus, Check } from 'lucide-react'
 import { fmtMoney } from '../../lib/format'
 
@@ -77,7 +78,7 @@ export default function ProductDetailModal({ open, product, groups, onClose, onA
   }
 
   const portal = (
-    <div className="absolute inset-0 z-[80] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
         className="relative bg-card border border-line rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden animate-pop"
@@ -88,7 +89,7 @@ export default function ProductDetailModal({ open, product, groups, onClose, onA
           <span className="text-4xl">{product.emoji}</span>
           <div className="flex-1 min-w-0">
             <h3 className="text-lg font-bold text-night truncate">{product.name}</h3>
-            <p className="text-base font-mono font-semibold text-brand">{fmtMoney(product.price)}</p>
+            <p className="text-base font-mono font-semibold text-brand dark:text-night">{fmtMoney(product.price)}</p>
           </div>
           <button onClick={onClose} className="touch-icon w-10 h-10 grid place-items-center rounded-xl hover:bg-page transition text-muted">
             <X size={20} />
@@ -179,5 +180,5 @@ export default function ProductDetailModal({ open, product, groups, onClose, onA
     </div>
   )
 
-  return portal
+return createPortal(portal, document.body)
 }

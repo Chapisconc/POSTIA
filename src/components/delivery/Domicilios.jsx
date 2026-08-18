@@ -29,7 +29,7 @@ function AssignRiderModal({ order, state, onClose, onAssign }) {
   return (
     <Modal open onClose={onClose} title={`Asignar repartidor · #${order.folio}`}>
       <div className="space-y-4">
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2">
+        <div className="rounded-xl bg-warning-soft border border-warning px-3 py-2">
           <div className="text-sm font-bold text-night">{order.client?.name || 'Sin cliente'}</div>
           <div className="text-xs text-muted mt-0.5">📍 {order.client?.address || 'Sin dirección'}</div>
         </div>
@@ -354,9 +354,9 @@ export default function Domicilios({ state, refresh, onNav, params, user }) {
                   {o.client?.name || 'Sin cliente'}{o.client?.phone ? ` · ${o.client.phone}` : ''}
                 </div>
 
-                <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2">
+                <div className="rounded-xl bg-warning-soft border border-warning px-3 py-2">
                   <div className="flex items-start gap-1.5">
-                    <MapPin size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                    <MapPin size={15} className="text-warning shrink-0 mt-0.5" />
                     <div className="min-w-0">
                       <div className="text-sm font-bold text-night leading-snug">{o.client?.address || 'Sin dirección'}</div>
                       {(o.client?.colony || o.client?.reference) && (

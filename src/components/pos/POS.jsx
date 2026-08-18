@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { Clock, X, Plus, Percent, Box, HandCoins, Tag, Printer, Check, ArrowLeft, ArrowLeftRight, Banknote, CheckCircle2, ChefHat, ChevronDown } from 'lucide-react'
+import { Clock, X, Plus, Percent, Box, HandCoins, Tag, Printer, Check, ArrowLeft, ArrowLeftRight, Banknote, CheckCircle2, ChefHat } from 'lucide-react'
 import { Card, Button, Badge, Field, Input, Select, Modal, QtyStepper, Segmented, EmptyState, SearchInput } from '../ui'
 import ModifierPicker from '../shared/ModifierPicker'
 import { ServiceBadge, OrderStatusBadge } from '../shared/StatusBadge'
 import { fmtMoney, fmtDec, fmtDuration } from '../../lib/format'
 import { toast, toastOk, toastErr, toastWarn } from '../../lib/notify'
 import { soundNewOrder, vibrate } from '../../lib/sound'
-import { cn } from '../../lib/cn'
+import { fuzzyMatch } from '../../lib/search'
+
 import { printTicket } from '../../lib/ticket'
 import {
   buildItem, createOrder, payOrder, updateOrder, cancelOrder, findOrCreateClient, setOrderStatus, readState, moveTable,
-  PAYMENT_METHODS, paymentBreakdown, getSettings, authorizeSupervisor,
+  PAYMENT_METHODS, paymentBreakdown, getSettings, authorizeSupervisor, ORDER_TRANSITIONS, ORDER_STATUS_LABEL,
 } from '../../lib/storage'
 import ProductDetailModal from './ProductDetailModal'
 import ClientSelect from './ClientSelect'
@@ -54,14 +55,27 @@ function FreeProductModal({ onClose, onAdd }) {
 }
 
 const SERVICE_OPTIONS = [
-  { value: 'mostrador', emoji: '🛍️', label: 'Para llevar', desc: 'Lo recogen en el mostrador', grad: 'from-sky-500 to-sky-700' },
-  { value: 'domicilio', emoji: '🛵', label: 'Domicilio', desc: 'Entrega a domicilio', grad: 'from-amber-500 to-orange-600' },
-  { value: 'mesa', emoji: '🍽️', label: 'Mesa', desc: 'Comensal en el lugar', grad: 'from-brand to-blue-700' },
+  { value: 'mostrador', emoji: '🛍️', label: 'Para llevar', desc: 'Pedido para recoger en mostrador. Rápido y directo.' },
+  { value: 'express', emoji: '⚡', label: 'Express', desc: 'Pedido rápido sin cliente. Directo al catálogo.' },
+  { value: 'domicilio', emoji: '🛵', label: 'Domicilio', desc: 'Entrega a dirección del cliente.' },
+  { value: 'mesa', emoji: '🍽️', label: 'Mesa', desc: 'Comensal en restaurante. Selecciona mesa.' },
 ]
 
-function ServicePickerModal({ open, onClose, onPick, state }) {
-  const [st, setSt] = useState('')
+function ClientServiceDrawer({ open, onClose, onConfirm, state, user, existingOrder, isNewOrder = false, currentItems = [], currentOrderId = null, currentServiceType = 'mostrador' }) {
+  const [step, setStep] = useState('service')
+  const [selectedService, setSelectedService] = useState(null)
   const [tableId, setTableId] = useState('')
+  const [clientQuery, setClientQuery] = useState('')
+  const [clientName, setClientName] = useState(existingOrder?.client?.name || '')
+  const [clientPhone, setClientPhone] = useState(existingOrder?.client?.phone || '')
+  const [address, setAddress] = useState(existingOrder?.client?.address || '')
+  const [colony, setColony] = useState(existingOrder?.client?.colony || '')
+  const [reference, setReference] = useState(existingOrder?.client?.reference || '')
+  const [skipAddress, setSkipAddress] = useState(false)
+  const [showSupervisorCode, setShowSupervisorCode] = useState(false)
+  const [supervisorCode, setSupervisorCode] = useState('')
+  const [supervisorError, setSupervisorError] = useState('')
+
   const freeTables = state.tables.filter((t) => t.status === 'libre')
   const mesaGroups = state.salons.map((salon) => ({
     salon,
@@ -69,70 +83,377 @@ function ServicePickerModal({ open, onClose, onPick, state }) {
   })).filter((g) => g.tables.length > 0)
   const hasFreeTables = freeTables.length > 0
 
-  const confirm = () => {
-    if (st === 'mesa' && !tableId) { toastErr('Selecciona una mesa'); return }
-    onPick(st, st === 'mesa' ? tableId : null)
+  const clientMatches = useMemo(() => {
+    const q = clientQuery.trim().toLowerCase()
+    if (!q) return []
+    return state.clients
+      .filter((c) => (c.name || '').toLowerCase().includes(q) || String(c.phone || '').includes(q))
+      .slice(0, 10)
+  }, [state.clients, clientQuery])
+
+  const handleSelectClient = (c) => {
+    setClientName(c.name || '')
+    setClientPhone(c.phone || '')
+    setAddress(c.address || '')
+    setColony(c.colony || '')
+    setReference(c.reference || '')
+    setClientQuery('')
+    setStep('clientInfo')
   }
 
-  const reset = () => {
-    setSt('')
-    setTableId('')
+  const createNewClient = () => {
+    if (!clientName.trim() && !clientQuery.trim()) {
+      toastErr('Ingresa el nombre del cliente')
+      return
+    }
+    const name = clientName.trim() || clientQuery.trim()
+    const { client } = findOrCreateClient({ name, phone: clientPhone.trim() })
+    setClientName(client.name || '')
+    setClientPhone(client.phone || '')
+    setClientQuery('')
+    setStep('clientInfo')
   }
 
-  const choose = (value, table) => {
-    onPick(value, table || null)
+  const handleSupervisorBypass = () => {
+    const auth = authorizeSupervisor(supervisorCode)
+    if (auth) {
+      setSkipAddress(true)
+      setShowSupervisorCode(false)
+      setSupervisorCode('')
+      toastOk(`Autorizado por ${auth.role === 'admin' ? 'admin' : 'supervisor'} ${auth.name}`)
+    } else {
+      setSupervisorError('Código incorrecto. Solo admin o supervisor.')
+    }
+  }
+
+  const continueToClient = () => {
+    if (selectedService === 'mesa' && !tableId) {
+      toastErr('Selecciona una mesa')
+      return
+    }
+    setStep('client')
+  }
+
+  const continueToAddress = () => {
+    if (selectedService === 'domicilio' && !address.trim() && !skipAddress) {
+      setShowSupervisorCode(true)
+      return
+    }
+    setStep(skipAddress ? 'review' : 'address')
+  }
+
+  const canConfirm = () => {
+    if (selectedService === 'mesa' && !tableId) return false
+    if (selectedService === 'domicilio' && !address.trim() && !skipAddress) return false
+    return true
+  }
+
+  const handleConfirm = () => {
+    if (!canConfirm()) return
+    onConfirm({
+      serviceType: selectedService,
+      tableId: selectedService === 'mesa' ? tableId : undefined,
+      client: {
+        name: clientName.trim() || (existingOrder?.client?.name || ''),
+        phone: clientPhone.trim() || (existingOrder?.client?.phone || ''),
+        address: address.trim() || undefined,
+        colony: colony.trim() || undefined,
+        reference: reference.trim() || undefined,
+      },
+      deliveryCost: selectedService === 'domicilio' ? (state.settings.delivery?.baseCost ?? 30) : 0,
+    })
+    reset()
+    onClose()
+  }
+
+  // Direct select: for mostrador/express, skip review and go to catalog
+  const handleDirectSelect = (service) => {
+    onConfirm({
+      serviceType: service,
+      client: null,
+      deliveryCost: 0,
+    })
     reset()
   }
 
-  return (
-    <Modal open={open} onClose={onClose} title="Nuevo pedido" maxW="max-w-lg" zIndex="z-[70]">
-      <p className="text-sm text-muted mb-3">¿Cómo tomarás el pedido?</p>
-      <div className="space-y-2.5">
-        {SERVICE_OPTIONS.map((o) => {
-          const disabled = o.value === 'mesa' && !hasFreeTables
-          return (
-            <button
-              key={o.value}
-              type="button"
-              disabled={disabled}
-              onClick={() => { if (o.value === 'mesa') { setSt(o.value) } else { choose(o.value, null) } }}
-              className={`w-full flex items-center gap-4 text-left rounded-2xl border p-4 transition hover:shadow-md ${st === o.value ? 'border-brand ring-2 ring-brand-soft bg-brand-soft/30' : 'border-line hover:border-brand'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}>
-              <span className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${o.grad} grid place-items-center text-2xl text-white shrink-0`}>{o.emoji}</span>
-              <span className="min-w-0">
-                <span className="block font-bold text-night text-base">{o.label}</span>
-                <span className="block text-xs text-muted">{o.desc}</span>
-              </span>
-              {o.value === 'mesa' && st === o.value && <span className="ml-auto text-brand text-sm font-bold shrink-0">Continuar →</span>}
-              {disabled && <span className="ml-auto text-[10px] font-semibold text-muted">Sin mesas libres</span>}
-            </button>
-          )
-        })}
-      </div>
+  const reset = () => {
+    setStep('service')
+    setSelectedService(null)
+    setTableId('')
+    setClientQuery('')
+    setClientName('')
+    setClientPhone('')
+    setAddress('')
+    setColony('')
+    setReference('')
+    setSkipAddress(false)
+    setShowSupervisorCode(false)
+    setSupervisorCode('')
+    setSupervisorError('')
+  }
 
-      {st === 'mesa' && (
-        <div className="mt-4 space-y-3">
-          <Field label="Mesa">
-            <Select value={tableId} onChange={(e) => setTableId(e.target.value)}>
-              <option value="">Seleccionar mesa…</option>
-              {mesaGroups.length === 0 && <option value="" disabled>No hay mesas libres</option>}
-              {mesaGroups.map((g) => (
-                <optgroup key={g.salon.id} label={g.salon.name}>
-                  {g.tables.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+  const close = () => {
+    // If drawer is closed without selecting service but items exist, default to mostrador
+    if (!selectedService && currentItems && currentItems.length > 0) {
+      onConfirm({
+        serviceType: 'mostrador',
+        client: null,
+        deliveryCost: 0,
+      })
+      reset()
+      onClose()
+      return
+    }
+    onClose()
+    reset()
+  }
+
+  if (!open) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] grid place-items-center p-4 bg-night/50 backdrop-blur-sm"
+      onClick={close}
+    >
+      <div
+        className="bg-card rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl animate-pop"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
+          <h3 className="type-h3 text-night">{existingOrder ? 'Editar pedido' : 'Nuevo pedido'} · Paso {step === 'service' ? '1: Servicio' : step === 'client' ? '2: Cliente' : step === 'address' ? '3: Dirección' : step === 'clientInfo' ? '2: Cliente' : '4: Review'}</h3>
+          <button onClick={close} className="w-8 h-8 grid place-items-center rounded-lg text-muted hover:text-danger touch-icon">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 min-h-0 space-y-4">
+          {/* === STEP 1: Service === */}
+          {step === 'service' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+              {SERVICE_OPTIONS.map((o) => {
+                const disabled = o.value === 'mesa' && !hasFreeTables
+                const selected = selectedService === o.value
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      if (o.value === 'mesa') {
+                        setSelectedService(o.value)
+                        setStep('client')
+                      } else if (o.value === 'domicilio') {
+                        setSelectedService(o.value)
+                        setStep('client')
+                      } else {
+                        // mostrador or express — direct to catalog
+                        handleDirectSelect(o.value === 'express' ? 'mostrador' : o.value)
+                      }
+                    }}
+                    className={`relative flex flex-col items-start text-left rounded-xl border-2 p-4 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${selected ? 'border-brand bg-brand-soft/40 ring-2 ring-brand/30 shadow-md' : 'border-line hover:border-brand bg-card'} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-2xl">{o.emoji}</span>
+                      <span className="font-bold text-night text-base">{o.label}</span>
+                    </div>
+                    <span className="text-xs text-muted leading-relaxed">{o.desc}</span>
+                    {o.value === 'express' && (
+                      <span className="absolute top-2 right-2 text-[9px] font-bold bg-warning/20 text-warning-dark px-1.5 py-0.5 rounded-full">RÁPIDO</span>
+                    )}
+                    {disabled && (
+                      <span className="mt-2 text-[10px] font-semibold text-muted bg-line/50 px-2 py-1 rounded-lg w-fit">Sin mesas libres</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="mt-3 flex items-center gap-2 p-3 rounded-xl bg-page border border-line">
+              <span className="text-sm">💡</span>
+              <span className="text-xs text-muted leading-relaxed">
+                <strong className="text-night">Para llevar y Express</strong> van directo al catálogo. <strong className="text-night">Domicilio</strong> requiere datos de entrega. <strong className="text-night">Mesa</strong> necesita seleccionar una mesa.
+              </span>
+            </div>
+          </>
+        )}
+
+          {/* === STEP: Mesa selection (when mesa chosen) === */}
+          {selectedService === 'mesa' && step === 'client' && (
+            <div className="space-y-3">
+              <Field label="Selecciona mesa">
+                <Select value={tableId} onChange={(e) => setTableId(e.target.value)} className="border-line">
+                  <option value="">Seleccionar mesa…</option>
+                  {mesaGroups.length === 0 && <option value="" disabled>No hay mesas libres</option>}
+                  {mesaGroups.map((g) => (
+                    <optgroup key={g.salon.id} label={g.salon.name}>
+                      {g.tables.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} • {t.capacity} pers.</option>
+                      ))}
+                    </optgroup>
                   ))}
-                </optgroup>
-              ))}
-            </Select>
-          </Field>
-          <div className="flex gap-2">
-            <Button variant="ghost" className="flex-1" onClick={reset}>Regresar</Button>
-            <Button className="flex-1" onClick={confirm}>Empezar pedido</Button>
+                </Select>
+              </Field>
+            </div>
+          )}
+
+          {/* === STEP 2: Client search === */}
+          {step === 'client' && (
+            <div className="space-y-3">
+              <Field label="Buscar cliente">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted">📱</span>
+                  <input
+                    value={clientQuery}
+                    onChange={(e) => setClientQuery(e.target.value)}
+                    placeholder="Teléfono o nombre…"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-line bg-card text-night text-sm outline-none focus:border-brand"
+                  />
+                </div>
+              </Field>
+
+              {clientMatches.length > 0 && (
+                <div className="space-y-1">
+                  {clientMatches.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => handleSelectClient(c)}
+                      className="w-full text-left p-2.5 rounded-xl border border-line bg-page hover:bg-line/30 transition"
+                    >
+                      <div className="font-medium text-sm text-night">{c.name}</div>
+                      {c.phone && <div className="text-xs text-muted font-mono">{c.phone}</div>}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {clientQuery && clientMatches.length === 0 && (
+                <div className="text-center py-4 text-sm text-muted">No se encontró. Crea el cliente abajo.</div>
+              )}
+
+              {!clientQuery && clientMatches.length === 0 && (
+                <div className="text-center py-4 text-sm text-muted">Busca o escribe para crear un nuevo cliente.</div>
+              )}
+            </div>
+          )}
+
+          {/* === STEP: Client info (after selecting/creating === */}
+          {step === 'clientInfo' && (
+            <div className="space-y-3">
+              <Field label="Nombre del cliente">
+                <Input value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Nombre" className="!py-2 !text-base" />
+              </Field>
+              <Field label="Teléfono">
+                <Input value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} placeholder="000-000-0000" type="tel" className="!py-2 !text-base" />
+              </Field>
+              {clientName && (
+                <button
+                  type="button"
+                  onClick={createNewClient}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-brand/30 text-brand text-sm font-semibold hover:bg-brand-soft transition"
+                >
+                  <span className="w-5 h-5 rounded-full bg-brand/10 grid place-items-center text-xs">+</span>
+                  Crear nuevo cliente "{clientName}"
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* === STEP 3: Address (domicilio only) === */}
+          {selectedService === 'domicilio' && step === 'address' && (
+            <div className="space-y-3">
+              <Field label="Dirección de entrega *">
+                <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Calle y número" className="!py-2 !text-base" />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Colonia">
+                  <Input value={colony} onChange={(e) => setColony(e.target.value)} placeholder="Colonia" className="!py-2 !text-sm" />
+                </Field>
+                <Field label="Referencia">
+                  <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Referencia" className="!py-2 !text-sm" />
+                </Field>
+              </div>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={skipAddress} onChange={(e) => setSkipAddress(e.target.checked)} className="w-4 h-4 rounded border-line text-brand" />
+                <span className="text-muted">Sin dirección (requiere código de supervisor)</span>
+              </label>
+            </div>
+          )}
+
+          {/* === STEP: Supervisor code popup === */}
+          {showSupervisorCode && (
+            <div className="fixed inset-0 z-[80] grid place-items-center p-4 bg-night/50 backdrop-blur-sm">
+              <div className="w-full max-w-sm bg-card rounded-xl p-5 shadow-2xl">
+                <h4 className="type-h3 text-night mb-3">Autorización supervisor</h4>
+                <p className="text-sm text-muted mb-3">Ingresa el código de supervisor o admin para omitir dirección.</p>
+                <Input
+                  value={supervisorCode}
+                  onChange={(e) => { setSupervisorCode(e.target.value); setSupervisorError('') }}
+                  placeholder="Código de supervisor"
+                  type="password"
+                  className="!py-2 !text-base"
+                />
+                {supervisorError && <p className="text-xs text-danger mt-1">{supervisorError}</p>}
+                <div className="flex gap-2 mt-4">
+                  <Button variant="ghost" className="flex-1" onClick={() => setShowSupervisorCode(false)}>Cancelar</Button>
+                  <Button variant="gradient" className="flex-1" onClick={handleSupervisorBypass}>Autorizar</Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* === STEP 4: Review === */}
+          {step === 'review' && (
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl bg-page border border-line space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-muted">Servicio</span><span className="font-semibold text-night">{SERVICE_OPTIONS.find(o => o.value === selectedService)?.label || selectedService}</span></div>
+                {selectedService === 'mesa' && tableId && (
+                  <div className="flex justify-between"><span className="text-muted">Mesa</span><span className="font-semibold text-night">{tableOf(state, tableId)?.name || tableId}</span></div>
+                )}
+                {selectedService === 'domicilio' && address && (
+                  <div className="flex justify-between"><span className="text-muted">Dirección</span><span className="font-semibold text-night truncate">{address}</span></div>
+                )}
+                {(clientName || clientPhone) && (
+                  <div className="flex justify-between"><span className="text-muted">Cliente</span><span className="font-semibold text-night">{clientName || clientPhone || '—'}</span></div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Navigation buttons */}
+          <div className="flex gap-2 pt-2">
+            {step !== 'service' && (
+              <Button variant="ghost" className="flex-1" onClick={() => setStep('service')}>← Back</Button>
+            )}
+            {step === 'client' && selectedService !== 'mesa' && (
+              <Button variant="ghost" className="flex-1" onClick={() => setStep(selectedService === 'domicilio' ? 'address' : 'clientInfo')}>Saltar</Button>
+            )}
+            {step === 'client' && (
+              <Button variant="gradientSuccess" className="flex-1" onClick={continueToClient}>
+                Continuar
+              </Button>
+            )}
+            {step === 'clientInfo' && (
+              <Button variant="gradientSuccess" className="flex-1" onClick={() => selectedService === 'domicilio' ? setStep('address') : setStep('review')}>
+                Continuar
+              </Button>
+            )}
+            {step === 'address' && (
+              <Button variant="gradientSuccess" className="flex-1" onClick={handleConfirm} disabled={!canConfirm()}>
+                Confirmar pedido
+              </Button>
+            )}
+            {step === 'review' && (
+              <Button variant="gradientSuccess" className="flex-1" onClick={handleConfirm}>
+                Confirmar pedido
+              </Button>
+            )}
           </div>
         </div>
-      )}
-    </Modal>
+      </div>
+    </div>
   )
 }
+
+const tableOf = (state, id) => state.tables.find((t) => t.id === id)
 
 function PosTimer({ start }) {
   const [now, setNow] = useState(() => Date.now())
@@ -170,6 +491,7 @@ export default function POS({ state, refresh, onNav, params, user }) {
   const [picker, setPicker] = useState(null)
 
   const [serviceOpen, setServiceOpen] = useState(false)
+  const [clientDrawerOpen, setClientDrawerOpen] = useState(false)
   const [payTarget, setPayTarget] = useState(null)
   const [openExtra, setOpenExtra] = useState(null)
   const [activeCat, setActiveCat] = useState('featured')
@@ -185,7 +507,6 @@ export default function POS({ state, refresh, onNav, params, user }) {
   const [payCashReceived, setPayCashReceived] = useState('')
   const [mountAt] = useState(() => Date.now())
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
-  const [drawerExpanded, setDrawerExpanded] = useState(true)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const [printMenuOpen, setPrintMenuOpen] = useState(false)
   const [confirmAction, setConfirmAction] = useState(null)
@@ -333,8 +654,8 @@ export default function POS({ state, refresh, onNav, params, user }) {
   const total = Math.max(0, subtotal - totalDisc + tipNum + deliveryNum + packNum)
 
   const shown = products.filter((p) => {
-    const q = search.trim().toLowerCase()
-    if (q) return p.name.toLowerCase().includes(q)
+    const q = search.trim()
+    if (q) return fuzzyMatch(q, p.name)
     if (activeCat === 'featured') return !!p.featured
     return p.categoryId === activeCat
   })
@@ -350,17 +671,27 @@ export default function POS({ state, refresh, onNav, params, user }) {
     return c
   }, [state.orders])
 
-  const handlePickService = (st, tid) => {
-    setServiceType(st)
-    setTableId(tid || '')
+  const handlePickService = (data) => {
+    setServiceType(data.serviceType || 'mostrador')
+    setTableId(data.tableId || '')
+    if (data.client) {
+      setClientName(data.client.name || '')
+      setClientPhone(data.client.phone || '')
+      setAddress(data.client.address || '')
+      setColony(data.client.colony || '')
+      setReference(data.client.reference || '')
+    }
+    if (data.deliveryCost != null) setDeliveryCost(String(data.deliveryCost))
     setServiceOpen(false)
     setCatalogOpen(true)
-    setCartOpen(false)
-    if (st === 'domicilio' && deliveryCost === '') {
-      const base = state.settings.delivery?.baseCost ?? 30
-      setDeliveryCost(String(base))
-      toast('Costo de envío base aplicado', 'info')
+    setCartOpen(true)
+    if (data.serviceType === 'domicilio') {
+      toast('Pedido de domicilio · agrega dirección y reparto', 'info')
     }
+  }
+
+  const changeServiceType = () => {
+    setClientDrawerOpen(true)
   }
 
   const addItem = (product, qty = 1, modifiers = [], note = '') => {
@@ -671,25 +1002,25 @@ export default function POS({ state, refresh, onNav, params, user }) {
         <div className="lg:hidden shrink-0 border-b border-line">
           <div className="flex items-center gap-2 px-3 pt-3 pb-2">
             <button onClick={() => { setCatalogOpen(false); setCartOpen(true) }}
-              className="flex items-center gap-1.5 text-sm font-bold text-brand shrink-0 px-3 py-2 rounded-lg hover:bg-brand-soft transition">
+              className="flex items-center gap-1.5 text-sm font-bold text-brand shrink-0 px-3 py-2.5 rounded-lg hover:bg-brand-soft transition touch-target">
               <ArrowLeft size={16} /> Volver al pedido
             </button>
             <div className="flex-1 min-w-0 overflow-x-auto flex items-center gap-1">
               <button type="button" onClick={() => { setActiveCat('featured'); setSearch('') }}
-                className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${activeCat === 'featured' ? 'bg-brand text-white' : 'bg-page text-muted'}`}>
+                className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-semibold transition touch-target ${activeCat === 'featured' ? 'bg-brand text-white' : 'bg-page text-muted'}`}>
                 Vendidos
               </button>
               {cats.map((c) => (
                 <button key={c.id} type="button" onClick={() => { setActiveCat(c.id); setSearch('') }}
-                  className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${activeCat === c.id ? 'bg-brand text-white' : 'bg-page text-muted'}`}>
+                  className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-semibold transition touch-target ${activeCat === c.id ? 'bg-brand text-white' : 'bg-page text-muted'}`}>
                   {c.name}
                 </button>
               ))}
             </div>
           </div>
-          <div className="px-3 pb-2 flex gap-2">
-            <SearchInput value={search} onChange={setSearch} placeholder="Buscar…" className="flex-1 !py-1.5 !text-[12px]" />
-            <Button onClick={() => setFreeOpen(true)} className="shrink-0 !py-1.5 !text-xs"><Tag size={12} className="mr-1" /> Libre</Button>
+          <div className="px-3 pb-2.5 flex gap-2">
+            <SearchInput value={search} onChange={setSearch} placeholder="Buscar…" className="flex-1 !py-2 !text-[12px]" />
+            <Button onClick={() => setFreeOpen(true)} className="shrink-0 !py-2 !text-xs touch-target"><Tag size={12} className="mr-1" /> Libre</Button>
           </div>
         </div>
 
@@ -735,13 +1066,13 @@ export default function POS({ state, refresh, onNav, params, user }) {
                       <div className="h-24 lg:h-32 grid place-items-center bg-page text-4xl lg:text-5xl">{p.emoji}</div>
                       <div className="p-2.5 lg:p-3">
                         <div className="text-sm lg:text-base font-semibold text-night leading-tight line-clamp-2">{p.name}</div>
-                        <div className="mt-1 font-mono font-bold text-brand text-sm lg:text-base tabular-nums">{fmtMoney(p.price)}</div>
+                        <div className="mt-1 font-mono font-bold text-brand dark:text-night text-sm lg:text-base tabular-nums">{fmtMoney(p.price)}</div>
                         {p.modGroupIds?.length > 0 && <div className="text-[11px] lg:text-xs text-muted mt-1">⚙️ Personalizable</div>}
                       </div>
                     </button>
                     <div className="px-2.5 lg:px-3 pb-2.5 lg:pb-3">
                       <button type="button" onClick={() => quickAdd(p)}
-                        className="w-full flex items-center justify-center gap-1 py-2 rounded-lg bg-brand text-white text-xs lg:text-sm font-semibold hover:bg-brand-dark transition">
+                        className="w-full flex items-center justify-center gap-1 py-2.5 rounded-lg bg-brand text-white text-xs lg:text-sm font-semibold hover:bg-brand-dark transition touch-target">
                         <Plus size={14} /> Agregar
                       </button>
                     </div>
@@ -806,7 +1137,7 @@ export default function POS({ state, refresh, onNav, params, user }) {
               {/* ═══ HEADER PAGO ═══ */}
               <div className="flex items-center gap-2 px-4 py-2.5 shrink-0 border-b border-line bg-card">
                 <button type="button" onClick={() => setPayTarget(null)}
-                  className="shrink-0 w-8 h-8 grid place-items-center rounded-lg hover:bg-page transition">
+                  className="shrink-0 w-10 h-10 grid place-items-center rounded-lg hover:bg-page transition touch-icon">
                   <ArrowLeft size={18} />
                 </button>
                 <span className="text-sm font-bold text-night truncate">Registrar pago</span>
@@ -833,7 +1164,7 @@ export default function POS({ state, refresh, onNav, params, user }) {
                   <div className="grid grid-cols-4 gap-2">
                     {PAYMENT_METHODS.map((m) => (
                       <button key={m.id} type="button" onClick={() => { setPayMethod(m.id); setPayCashReceived('') }}
-                        className={`py-2.5 rounded-xl border text-xs font-semibold transition flex flex-col items-center gap-0.5 ${payMethod === m.id ? 'border-brand bg-brand-soft text-brand-dark ring-1 ring-brand' : 'border-line text-muted hover:bg-page'}`}>
+                        className={`py-3 rounded-xl border text-xs font-semibold transition flex flex-col items-center gap-0.5 touch-target ${payMethod === m.id ? 'border-brand bg-brand-soft text-brand-dark ring-1 ring-brand' : 'border-line text-muted hover:bg-page'}`}>
                         <span className="text-lg">{m.icon}</span>{m.label}
                       </button>
                     ))}
@@ -857,7 +1188,7 @@ export default function POS({ state, refresh, onNav, params, user }) {
                     <div className="flex flex-wrap gap-1.5">
                       {payPresets.map((p) => (
                         <button key={p} type="button" onClick={() => setPayCashReceived(String(p))}
-                          className={`px-3 py-1.5 rounded-lg border text-xs font-mono font-semibold transition ${Number(payCashReceived) === p ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-muted hover:bg-page'}`}>
+                          className={`px-3 py-2 rounded-lg border text-xs font-mono font-semibold transition touch-target ${Number(payCashReceived) === p ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-muted hover:bg-page'}`}>
                           {fmtMoney(p)}
                         </button>
                       ))}
@@ -884,25 +1215,26 @@ export default function POS({ state, refresh, onNav, params, user }) {
             </>
           ) : (
             <>
-              {/* ═══ HEADER PEDIDO (click to expand/collapse on mobile) ═══ */}
+              {/* ═══ HEADER PEDIDO ═══ */}
               <div
-                className={`flex flex-col shrink-0 border-b border-line bg-card cursor-pointer lg:cursor-default ${drawerExpanded ? '' : ''}`}
-                onClick={() => !isDesktop && setDrawerExpanded(!drawerExpanded)}
+                className="flex flex-col shrink-0 border-b border-line bg-card"
               >
                 {/* Row 1: badges + timer + close */}
                 <div className="flex items-center gap-1.5 px-3 py-1.5">
                   <Badge className="shrink-0 !text-[10px]">#{activeOrder?.folio || 'Nuevo'}</Badge>
                   <ServiceBadge type={serviceType} />
+                  {!activeOrder?.paid && (
+                    <button
+                      type="button"
+                      onClick={() => changeServiceType()}
+                      title="Cambiar tipo de servicio"
+                      className="w-7 h-7 grid place-items-center rounded-lg text-muted hover:text-night hover:bg-page transition shrink-0 touch-icon"
+                    >
+                      <ArrowLeftRight size={13} />
+                    </button>
+                  )}
                   <OrderStatusBadge status={activeOrder?.status || 'nuevo'} />
                   <PosTimer start={mountAt} />
-                  {/* Expand/collapse indicator - mobile only */}
-                  <button
-                    type="button"
-                    className="lg:hidden ml-auto p-1 rounded text-muted hover:text-night"
-                    onClick={(e) => { e.stopPropagation(); setDrawerExpanded(!drawerExpanded) }}
-                  >
-                    <ChevronDown size={14} className={`transition-transform ${drawerExpanded ? 'rotate-180' : ''}`} />
-                  </button>
                   <button type="button"
                     onClick={(e) => {
                       e.stopPropagation()
@@ -910,27 +1242,28 @@ export default function POS({ state, refresh, onNav, params, user }) {
                       setCartOpen(false)
                       onNav('pedidos')
                     }}
-                    className="shrink-0 w-6 h-6 grid place-items-center rounded-lg hover:bg-danger-soft hover:text-danger transition close-glow text-muted">
-                    <X size={14} className="text-muted" />
+                    title="Cerrar pedido"
+                    className="ml-auto shrink-0 w-9 h-9 grid place-items-center rounded-lg bg-danger text-white hover:bg-danger-dark transition touch-icon">
+                    <X size={18} />
                   </button>
                 </div>
                 {/* Row 2: compact info (always visible) */}
                 <div className="flex items-center justify-between px-3 pb-1.5 gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="text-xs text-night font-medium truncate">
-                      {clientName || order.client?.name || 'Sin cliente'}
+                      {clientName || 'Sin cliente'}
                       {serviceType === 'mesa' && state.tables.find(t => t.id === tableId)?.name ? ` · ${state.tables.find(t => t.id === tableId).name}` : ''}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="text-[10px] text-muted">{items.length} artículo{items.length !== 1 ? 's' : ''}</span>
+                    <span className="text-[10px] text-muted">{items.reduce((a, i) => a + (Number(i.qty) || 1), 0)} artículo{items.reduce((a, i) => a + (Number(i.qty) || 1), 0) !== 1 ? 's' : ''}</span>
                     <span className="font-mono font-bold text-night ml-1">{fmtMoney(total)}</span>
                   </div>
                 </div>
               </div>
 
-              {/* ═══ BODY PEDIDO (collapsible on mobile) ═══ */}
-              <div className={`flex flex-col flex-1 min-h-0 overflow-hidden ${!drawerExpanded && !isDesktop ? 'hidden' : ''}`}>
+              {/* ═══ BODY PEDIDO ═══ */}
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
 
 
                 {/* Scrollable area: title, client, items */}
@@ -992,12 +1325,12 @@ export default function POS({ state, refresh, onNav, params, user }) {
                 {/* Botones + Productos / Cocina */}
                 <div className="px-3 pt-2 flex items-center gap-2">
                   <button type="button" onClick={() => { setCatalogOpen(true); setCartOpen(false); setPicker(null) }}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-brand text-white text-sm font-bold hover:bg-brand-dark transition shadow-sm">
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-brand text-white text-sm font-bold hover:bg-brand-dark transition shadow-sm touch-target">
                     <Plus size={16} /> Productos
                   </button>
                   {orderId && (
                     <button type="button" onClick={printKitchen}
-                      className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-line text-sm font-semibold text-night hover:bg-page transition">
+                      className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-line text-sm font-semibold text-night hover:bg-page transition touch-target">
                       <Printer size={15} /> Cocina
                     </button>
                   )}
@@ -1025,7 +1358,7 @@ export default function POS({ state, refresh, onNav, params, user }) {
                                 const paid = Number(m.price) > 0
                                 return (
                                   <span key={m.id}
-                                    className={`text-[11px] sm:text-[9px] px-1.5 sm:px-1 py-0.5 sm:py-px rounded border whitespace-nowrap ${paid ? 'border-brand/30 bg-brand-soft/60 text-brand-dark font-semibold' : 'border-line bg-page text-muted'}`}>
+                                    className={`text-[11px] sm:text-[9px] px-1.5 sm:px-1 py-0.5 sm:py-px rounded border whitespace-nowrap ${paid ? 'border-brand/30 bg-brand-soft/60 text-brand-dark dark:text-night font-semibold' : 'border-line bg-page text-muted'}`}>
                                     {paid ? `+${n}` : `−${n}`}
                                   </span>
                                 )
@@ -1039,8 +1372,8 @@ export default function POS({ state, refresh, onNav, params, user }) {
                             <div className="font-mono font-bold text-night text-[13px]">{fmtMoney(it.lineTotal)}</div>
                           </div>
                           <button type="button" title="Quitar" onClick={() => removeItem(it.id)}
-                            className="w-6 h-6 grid place-items-center rounded text-muted hover:text-danger transition">
-                            <X size={13} />
+                            className="w-8 h-8 grid place-items-center rounded-lg text-muted hover:text-danger transition touch-icon">
+                            <X size={14} />
                           </button>
                         </div>
                       </div>
@@ -1056,7 +1389,7 @@ export default function POS({ state, refresh, onNav, params, user }) {
                 <div className="shrink-0 border-t border-line">
                 {items.length > 0 && (
                   <div className="px-3 pb-1.5 flex items-center justify-between text-[11px] text-muted pt-1.5">
-                    <span>{items.length} artículo{items.length === 1 ? '' : 's'}</span>
+                    <span>{items.reduce((a, i) => a + (Number(i.qty) || 1), 0)} artículo{items.reduce((a, i) => a + (Number(i.qty) || 1), 0) === 1 ? '' : 's'}</span>
                     <span className="font-mono font-semibold text-night">{fmtMoney(subtotal)}</span>
                   </div>
                 )}
@@ -1065,16 +1398,16 @@ export default function POS({ state, refresh, onNav, params, user }) {
                 {items.length > 0 && (
                   <div className="px-3 pb-1.5 flex gap-1.5">
                     <button type="button" onClick={() => setOpenExtra(openExtra === 'disc' ? null : 'disc')}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-semibold transition ${openExtra === 'disc' ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-muted hover:bg-page'}`}>
-                      <Percent size={11} /> Dcto
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-[11px] font-semibold transition touch-target ${openExtra === 'disc' ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-muted hover:bg-page'}`}>
+                      <Percent size={12} /> Dcto
                     </button>
                     <button type="button" onClick={() => setOpenExtra(openExtra === 'tip' ? null : 'tip')}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-semibold transition ${openExtra === 'tip' ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-muted hover:bg-page'}`}>
-                      <HandCoins size={11} /> Servicio
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-[11px] font-semibold transition touch-target ${openExtra === 'tip' ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-muted hover:bg-page'}`}>
+                      <HandCoins size={12} /> Servicio
                     </button>
                     <button type="button" onClick={() => setOpenExtra(openExtra === 'pack' ? null : 'pack')}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] font-semibold transition ${openExtra === 'pack' ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-muted hover:bg-page'}`}>
-                      <Box size={11} /> Embalaje
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-[11px] font-semibold transition touch-target ${openExtra === 'pack' ? 'border-brand bg-brand-soft text-brand-dark' : 'border-line text-muted hover:bg-page'}`}>
+                      <Box size={12} /> Embalaje
                     </button>
                   </div>
                 )}
@@ -1139,7 +1472,7 @@ export default function POS({ state, refresh, onNav, params, user }) {
                       {orderId && (
                         <div className="relative">
                           <button type="button" onClick={() => { setPrintMenuOpen(!printMenuOpen); setStatusMenuOpen(false); setMoreMenuOpen(false) }}
-                            className="p-1.5 rounded-lg hover:bg-page transition text-muted hover:text-night">
+                            className="w-8 h-8 grid place-items-center rounded-lg hover:bg-page transition text-muted hover:text-night touch-icon">
                             <Printer size={14} />
                           </button>
                           {printMenuOpen && (
@@ -1173,15 +1506,15 @@ export default function POS({ state, refresh, onNav, params, user }) {
                   {needsAccept ? (
                     <>
                       <button type="button" onClick={handleCancel}
-                        className="px-3 py-2 rounded-lg text-xs font-semibold transition border-2 border-danger text-danger hover:bg-danger hover:text-white flex items-center gap-1">
+                        className="px-3 py-2.5 rounded-lg text-xs font-semibold transition border-2 border-danger text-danger hover:bg-danger hover:text-white flex items-center gap-1 touch-target">
                         <X size={14} /> Cancelar
                       </button>
                       <button type="button" onClick={openPay}
-                        className="flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold transition bg-gradient-to-r from-brand to-brand-dark text-white shadow-md shadow-brand/25 hover:shadow-lg hover:shadow-brand/40 active:scale-[0.98] active:brightness-95 flex items-center justify-center gap-1">
+                        className="flex-1 min-w-[80px] px-3 py-2.5 rounded-lg text-xs font-bold transition bg-gradient-to-r from-brand to-brand-dark text-white shadow-md shadow-brand/25 hover:shadow-lg hover:shadow-brand/40 active:scale-[0.98] active:brightness-95 flex items-center justify-center gap-1 touch-target">
                         <Banknote size={14} /> Pago
                       </button>
                       <button type="button" onClick={acceptOrder}
-                        className="flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold transition bg-gradient-to-r from-success to-success-dark text-white shadow-md shadow-success/25 hover:shadow-lg hover:shadow-success/40 active:scale-[0.98] active:brightness-95 flex items-center justify-center gap-1">
+                        className="flex-1 min-w-[80px] px-3 py-2.5 rounded-lg text-xs font-bold transition bg-gradient-to-r from-success to-success-dark text-white shadow-md shadow-success/25 hover:shadow-lg hover:shadow-success/40 active:scale-[0.98] active:brightness-95 flex items-center justify-center gap-1 touch-target">
                         <Check size={14} /> Aceptar
                       </button>
                     </>
@@ -1189,43 +1522,43 @@ export default function POS({ state, refresh, onNav, params, user }) {
                     <>
                       <div className="relative">
                         <button type="button" onClick={() => { setStatusMenuOpen(!statusMenuOpen); setMoreMenuOpen(false); setPrintMenuOpen(false) }}
-                          className="px-3 py-2 rounded-lg text-xs font-semibold transition bg-page border border-line text-night hover:bg-card flex items-center gap-1">
+                          className="px-3 py-2.5 rounded-lg text-xs font-semibold transition bg-page border border-line text-night hover:bg-card flex items-center gap-1 touch-target">
                           <Clock size={14} /> Estado
                         </button>
                         {statusMenuOpen && (
-                          <div className="absolute top-full left-0 mt-1 w-44 bg-card border border-line rounded-xl shadow-xl z-[100] py-1">
-                            {['nuevo', 'preparando', 'listo', 'porcobrar'].map((s) => (
+                          <div className="absolute bottom-full left-0 mb-1 w-44 bg-card border border-line rounded-xl shadow-xl z-[100] py-1">
+                            {(ORDER_TRANSITIONS[activeOrder?.status] || []).filter((s) => s !== 'cancelado').map((s) => (
                               <button key={s} type="button"
                                 onClick={() => { if (orderId) { setOrderStatus(orderId, s, { user }); refresh() }; setStatusMenuOpen(false) }}
-                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-page flex items-center gap-2 transition">
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-page flex items-center gap-2 transition touch-target">
                                 {activeOrder?.status === s && <Check size={12} className="text-success" />}
-                                <span className={activeOrder?.status === s ? 'font-semibold text-night' : 'text-muted'}>{s === 'nuevo' ? 'Pendiente' : s === 'preparando' ? 'En preparación' : s === 'listo' ? 'Listo' : 'Por cobrar'}</span>
+                                <span className={activeOrder?.status === s ? 'font-semibold text-night' : 'text-muted'}>{ORDER_STATUS_LABEL[s]}</span>
                               </button>
                             ))}
                           </div>
                         )}
                       </div>
                       <button type="button" onClick={openPay}
-                        className="flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold transition bg-gradient-to-r from-brand to-brand-dark text-white shadow-md shadow-brand/25 hover:shadow-lg hover:shadow-brand/40 active:scale-[0.98] active:brightness-95 flex items-center justify-center gap-1">
+                        className="flex-1 min-w-[80px] px-3 py-2.5 rounded-lg text-xs font-bold transition bg-gradient-to-r from-brand to-brand-dark text-white shadow-md shadow-brand/25 hover:shadow-lg hover:shadow-brand/40 active:scale-[0.98] active:brightness-95 flex items-center justify-center gap-1 touch-target">
                         <Banknote size={14} /> Pago
                       </button>
                       <button type="button" onClick={saveOrder}
-                        className="flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold transition bg-gradient-to-r from-success to-success-dark text-white shadow-md shadow-success/25 hover:shadow-lg hover:shadow-success/40 active:scale-[0.98] active:brightness-95 flex items-center justify-center gap-1">
+                        className="flex-1 min-w-[80px] px-3 py-2.5 rounded-lg text-xs font-bold transition bg-gradient-to-r from-success to-success-dark text-white shadow-md shadow-success/25 hover:shadow-lg hover:shadow-success/40 active:scale-[0.98] active:brightness-95 flex items-center justify-center gap-1 touch-target">
                         <CheckCircle2 size={14} /> Finalizar
                       </button>
                       <div className="relative">
                         <button type="button" onClick={() => { setMoreMenuOpen(!moreMenuOpen); setStatusMenuOpen(false); setPrintMenuOpen(false) }}
-                          className="px-2 py-2 rounded-lg text-sm font-bold transition bg-page border border-line text-night hover:bg-card">
+                          className="w-9 h-9 rounded-lg text-sm font-bold transition bg-page border border-line text-night hover:bg-card grid place-items-center touch-icon">
                           ⋯
                         </button>
                         {moreMenuOpen && (
                           <div className="absolute bottom-full right-0 mb-2 w-44 bg-card border border-line rounded-xl shadow-xl z-50 py-1">
                             <button type="button" onClick={() => { setConfirmAction('cancel'); setMoreMenuOpen(false) }}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-page flex items-center gap-2 text-danger transition">
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-page flex items-center gap-2 text-danger transition touch-target">
                               <X size={14} /> Cancelar
                             </button>
                             <button type="button" onClick={() => { setConfirmAction('delete'); setMoreMenuOpen(false) }}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-page flex items-center gap-2 text-danger transition">
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-page flex items-center gap-2 text-danger transition touch-target">
                               <X size={14} /> Eliminar
                             </button>
                           </div>
@@ -1284,11 +1617,28 @@ export default function POS({ state, refresh, onNav, params, user }) {
       )}
 
       {serviceOpen && (
-        <ServicePickerModal
+        <ClientServiceDrawer
           open={serviceOpen}
           state={state}
+          user={user}
+          existingOrder={null}
+          isNewOrder={true}
+          currentItems={items}
+          currentOrderId={orderId}
+          currentServiceType={serviceType}
           onClose={() => setServiceOpen(false)}
-          onPick={handlePickService}
+          onConfirm={handlePickService}
+        />
+      )}
+
+      {clientDrawerOpen && (
+        <ClientServiceDrawer
+          open={clientDrawerOpen}
+          state={state}
+          user={user}
+          existingOrder={orderId ? state.orders.find((o) => o.id === orderId) : null}
+          onClose={() => setClientDrawerOpen(false)}
+          onConfirm={handlePickService}
         />
       )}
 
@@ -1367,16 +1717,16 @@ export default function POS({ state, refresh, onNav, params, user }) {
 
       {/* Backdrop: mobile always when drawer open; desktop only when floating drawer (catalog closed) */}
       {showDrawer && !isMesa && (!isDesktop || !showCatalog) && (
-        <div className={`fixed inset-0 z-30 bg-night`} onClick={() => setCartOpen(false)} />
+        <div className={`fixed inset-0 z-30 bg-night/50 backdrop-blur-sm`} onClick={() => onNav('pedidos')} />
       )}
 
       {items.length > 0 && !showDrawer && (
         <button
           type="button"
           onClick={() => { setCartOpen(true); setCatalogOpen(false) }}
-          className="fixed bottom-0 inset-x-0 z-30 lg:hidden bg-night text-white px-4 py-3 flex items-center justify-between gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.18)]">
+          className="fixed bottom-0 inset-x-0 z-30 lg:hidden bg-night text-white px-4 py-3.5 flex items-center justify-between gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.18)] touch-target">
           <span className="flex items-center gap-2 text-sm font-semibold">
-            <span className="w-6 h-6 rounded-lg bg-brand grid place-items-center text-xs font-extrabold">{items.length}</span>
+            <span className="w-7 h-7 rounded-lg bg-brand grid place-items-center text-xs font-extrabold">{items.length}</span>
             <span>Ver pedido</span>
           </span>
           <span className="font-mono text-lg font-extrabold">{fmtMoney(total)}</span>

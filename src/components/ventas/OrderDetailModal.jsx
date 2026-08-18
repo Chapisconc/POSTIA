@@ -44,7 +44,7 @@ export default function OrderDetailModal({ order, open, onClose }) {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted">Estado</span>
-              <span className={`text-xs font-semibold ${order.paid ? 'text-emerald-600' : 'text-amber-600'}`}>{order.paid ? 'Pagado' : 'No pagado'}</span>
+              <span className={`text-xs font-semibold ${order.paid ? 'text-success' : 'text-warning'}`}>{order.paid ? 'Pagado' : 'No pagado'}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted">Total</span>

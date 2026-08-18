@@ -155,7 +155,7 @@ export default function Marketing({ state, refresh, onNav }) {
               <div className="space-y-2">
                 {topClients.map((c, i) => (
                   <div key={c.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-page transition">
-                    <span className={`w-7 h-7 grid place-items-center rounded-full text-sm font-bold ${i === 0 ? 'bg-gold-soft text-gold' : i === 1 ? 'bg-line text-muted' : i === 2 ? 'bg-amber-100 text-amber-700' : 'bg-page text-muted'}`}>
+                    <span className={`w-7 h-7 grid place-items-center rounded-full text-sm font-bold ${i === 0 ? 'bg-gold-soft text-gold' : i === 1 ? 'bg-line text-muted' : i === 2 ? 'bg-warning-soft text-warning-dark' : 'bg-page text-muted'}`}>
                       {['🥇', '🥈', '🥉'][i] || i + 1}
                     </span>
                     <div className="flex-1 min-w-0">

@@ -15,7 +15,7 @@ const serviceLabel = (o) => SERVICE_NAMES[o.serviceType] || o.serviceType || ''
 
 export function buildTicket(order, settings = getSettings(), kind = 'ticket') {
   const s = settings || getSettings()
-  const brand = (s.business?.name || 'POSTIA').toUpperCase().slice(0, 20)
+  const brand = 'POSTIA'
   const isKitchen = kind === 'kitchen'
 
   // Header compacto

@@ -12,6 +12,7 @@ import { fmtMoney, fmtDateTime, fmtAgo } from '../../lib/format'
 import { toast, toastOk } from '../../lib/notify'
 import { addClient, updateClient, deleteClient } from '../../lib/storage'
 import { clientStatsAll } from '../../lib/stats'
+import { fuzzyMatch } from '../../lib/search'
 
 const emptyForm = { name: '', phone: '', address: '', notes: '' }
 
@@ -26,10 +27,10 @@ export default function Clientes({ state, refresh, onNav }) {
 
   const stats = useMemo(() => clientStatsAll(state), [state])
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     if (!q) return stats
     return stats.filter((c) =>
-      [c.name, c.phone, c.address, c.notes].some((x) => String(x || '').toLowerCase().includes(q))
+      [c.name, c.phone, c.address, c.notes].some((x) => fuzzyMatch(q, String(x || '')))
     )
   }, [stats, query])
 

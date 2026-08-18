@@ -38,6 +38,7 @@ export default {
         lg: 'var(--shadow-pop)',
         xl: 'var(--shadow-pop)',
         inner: 'inset 0 2px 4px 0 rgb(0 0 0 / 0.05)',
+        focus: 'var(--shadow-focus)',
       },
       keyframes: {
         'flash': {
@@ -48,10 +49,15 @@ export default {
           '0%':   { transform: 'scale(0.96)', opacity: '0' },
           '100%': { transform: 'scale(1)', opacity: '1' },
         },
+        'slide-in-right': {
+          '0%':   { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
       },
       animation: {
         'flash': 'flash 0.8s ease-out',
         'pop': 'pop 0.15s ease-out',
+        'slide-in-right': 'slide-in-right 0.2s ease-out',
       },
     },
   },

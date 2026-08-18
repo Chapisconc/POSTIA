@@ -11,7 +11,8 @@ function makeOrder(serviceType) {
     items: [{ id: 'i1', productId: 'p1', name: 'Producto', emoji: '🍔', qty: 1, price: 100, unitBase: 100, modifiers: [], note: '', lineTotal: 100, saved: 0 }],
     createdBy: user,
   })
-  return state.orders[0]
+  // createOrder devuelve el estado completo; el pedido nuevo es el último en el array
+  return state.orders[state.orders.length - 1]
 }
 
 function toReady(serviceType) {
@@ -20,6 +21,27 @@ function toReady(serviceType) {
   setKitchenStatus(order.id, 'listo', user)
   return order
 }
+
+describe('createOrder - folio diario', () => {
+  beforeEach(() => { resetAll() })
+
+  test('los folios reinician en #1 cada día', () => {
+    const a = makeOrder('mostrador')
+    const b = makeOrder('domicilio')
+    expect(a.folio).toBe(1)
+    expect(b.folio).toBe(2)
+    expect(a.folioDate).toBe(new Date().toISOString().slice(0, 10))
+  })
+
+  test('el folio local nunca colisiona con un pedido de hoy ya existente (previene 409 orders_folio_idx)', () => {
+    const s = readState()
+    s.orders.push({ id: 'hoy-1', folio: 5, folioDate: new Date().toISOString().slice(0, 10), status: 'finalizado', kitchenStatus: 'entregado', items: [], serviceType: 'mostrador' })
+    writeState(s)
+    const o = makeOrder('mostrador')
+    expect(o.folio).toBeGreaterThan(5)
+    expect(o.folio).toBe(6)
+  })
+})
 
 describe('setKitchenStatus - flujo de pedidos', () => {
   beforeEach(() => { resetAll() })

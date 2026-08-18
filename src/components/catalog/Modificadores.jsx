@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { SlidersHorizontal, Plus, Pencil, Trash2, X, Package, Search, AlertCircle } from 'lucide-react'
 import {
   Card, Button, Badge, Field, Input, Select, Modal, ConfirmDialog,
-  Toggle, EmptyState, PageHeader, Tabs,
+  Toggle, EmptyState, PageHeader,
 } from '../ui'
 import { addModGroup, updateModGroup, deleteModGroup } from '../../lib/storage'
 import { fmtMoney } from '../../lib/format'
@@ -213,56 +213,71 @@ export default function Modificadores({ state, refresh, onNav }) {
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Nombre del grupo *">
               <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Ej. Elige tu salsa" />
+              <p className="type-caption text-muted mt-1">Título que ve el cliente al personalizar. Ej. "¿Extra queso?"</p>
             </Field>
             <Field label="Tipo">
               <Select value={form.type} onChange={(e) => set('type', e.target.value)}>
                 {TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
               </Select>
+              <p className="type-caption text-muted mt-1">Clasificación visual del modificador.</p>
             </Field>
           </div>
 
           {/* Descripción */}
           <Field label="Descripción (opcional)">
             <Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Ej. Selecciona hasta 2 salsas para acompañar" />
+            <p className="type-caption text-muted mt-1">Texto informativo que guía al cliente.</p>
           </Field>
 
           {/* Categoría */}
           <Field label="Categoría (opcional)">
             <Input value={form.category} onChange={(e) => set('category', e.target.value)} placeholder="Ej. Salsas, Extras, Bebidas..." />
+            <p className="type-caption text-muted mt-1">Agrupa visualmente el modificador. Opcional.</p>
           </Field>
 
           {/* Requerido y límites */}
           <div className="grid sm:grid-cols-3 gap-4">
-            <Toggle checked={form.required} onChange={(v) => set('required', v)} label="Requerido" />
+            <div className="flex flex-col">
+              <Toggle checked={form.required} onChange={(v) => set('required', v)} label="Requerido" />
+              <p className="type-caption text-muted mt-1">El cliente debe elegir al menos una opción.</p>
+            </div>
             <Field label="Mínimo">
               <Input type="number" min="0" value={form.min} onChange={(e) => set('min', e.target.value)} />
+              <p className="type-caption text-muted mt-1">Mínimo de opciones que debe escoger. 0 = sin límite inferior.</p>
             </Field>
             <Field label="Máximo">
               <Input type="number" min="1" value={form.max} onChange={(e) => set('max', e.target.value)} />
+              <p className="type-caption text-muted mt-1">Máximo de opciones permitidas.</p>
             </Field>
           </div>
 
           {/* Valor por defecto y gratis */}
           <div className="grid sm:grid-cols-2 gap-4">
-            <Field label="Valor por defecto">
+            <Field label="Seleccionado por defecto">
               <Select value={form.defaultValue} onChange={(e) => set('defaultValue', e.target.value)}>
                 <option value="">Ninguno</option>
                 {form.items.filter((it) => it.name.trim()).map((it, i) => (
                   <option key={it.id || i} value={it.name.trim()}>{it.name.trim()}{Number(it.price) > 0 ? ` (+${fmtMoney(Number(it.price))})` : ''}</option>
                 ))}
               </Select>
+              <p className="type-caption text-muted mt-1">Opción que viene preseleccionada.</p>
             </Field>
-            <Field label="Primeros gratis">
+            <Field label="Primeras gratis">
               <Input type="number" min="0" value={form.freeCount} onChange={(e) => set('freeCount', e.target.value)} placeholder="0" />
+              <p className="type-caption text-muted mt-1">Cuántas opciones no cuestan extra.</p>
             </Field>
           </div>
 
           {/* Recargo por segundo elemento */}
           <div className="rounded-xl border border-line bg-page p-4 space-y-3">
-            <Toggle checked={form.surchargeOn} onChange={(v) => set('surchargeOn', v)} label="Recargo por selecciones adicionales" />
+            <div className="flex flex-col">
+              <Toggle checked={form.surchargeOn} onChange={(v) => set('surchargeOn', v)} label="Recargo por selecciones adicionales" />
+              <p className="type-caption text-muted mt-1">Aplica un cargo extra al elegir más allá de las primeras gratis.</p>
+            </div>
             {form.surchargeOn && (
               <Field label="Precio del recargo">
                 <Input type="number" min="0" step="0.01" value={form.surchargePrice} onChange={(e) => set('surchargePrice', e.target.value)} placeholder="0.00" />
+                <p className="type-caption text-muted mt-1">Cargo en pesos por cada opción adicional.</p>
               </Field>
             )}
           </div>
@@ -279,13 +294,20 @@ export default function Modificadores({ state, refresh, onNav }) {
               {form.items.map((it, i) => (
                 <div key={i} className="flex items-start gap-2 bg-card p-3 rounded-xl border border-line">
                   <div className="flex-1 space-y-2">
-                    <Input value={it.name} onChange={(e) => setItem(i, 'name', e.target.value)} placeholder="Ej. BBQ, Picante, Sin jitomate..." className="!py-2 !text-sm" />
-                    <div className="flex gap-2">
-                      <Input type="number" min="0" step="0.01" value={it.price} onChange={(e) => setItem(i, 'price', e.target.value)} placeholder="Precio" className="!py-2 !text-sm w-28" />
-                      <Input value={it.description} onChange={(e) => setItem(i, 'description', e.target.value)} placeholder="Descripción (opcional)" className="!py-2 !text-sm flex-1" />
+                    <Field label="Nombre de la opción *">
+                      <Input value={it.name} onChange={(e) => setItem(i, 'name', e.target.value)} placeholder="Ej. BBQ, Picante, Sin jitomate..." className="!py-2 !text-sm" />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="Precio extra">
+                        <Input type="number" min="0" step="0.01" value={it.price} onChange={(e) => setItem(i, 'price', e.target.value)} placeholder="0.00" className="!py-2 !text-sm" />
+                        <p className="type-caption text-muted mt-1">0 si es gratis.</p>
+                      </Field>
+                      <Field label="Descripción (opcional)">
+                        <Input value={it.description} onChange={(e) => setItem(i, 'description', e.target.value)} placeholder="Detalle..." className="!py-2 !text-sm" />
+                      </Field>
                     </div>
                   </div>
-                  <button onClick={() => removeItem(i)} title="Quitar" className="touch-icon p-2 rounded-lg text-muted hover:text-danger hover:bg-danger-soft transition">
+                  <button onClick={() => removeItem(i)} title="Quitar" className="touch-icon p-2 rounded-lg text-muted hover:text-danger hover:bg-danger-soft transition shrink-0">
                     <X size={16} />
                   </button>
                 </div>

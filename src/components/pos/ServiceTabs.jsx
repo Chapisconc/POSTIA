@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Search, User, MapPin, Clock, Printer, ArrowRight } from 'lucide-react'
 import { cn } from '../../lib/cn'
-import { fmtMoney } from '../../lib/format'
+
 
 export default function ServiceTabs({ active, onSwitch, counts, className }) {
   const [local, setLocal] = useState(active)

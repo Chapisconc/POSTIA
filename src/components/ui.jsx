@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, forwardRef } from 'react'
 
 export function Card({ children, className = '', ...rest }) {
   return (
-    <div className={`bg-card rounded-2xl border border-line shadow-sm ${className}`} {...rest}>
+    <div className={`bg-card rounded-xl border border-line shadow-sm ${className}`} {...rest}>
       {children}
     </div>
   )
@@ -16,24 +16,24 @@ export function StatCard({ icon: Icon, label, value, sub, tone = 'brand', onClic
     night: 'bg-night text-white',
     amber: 'bg-warning-soft text-warning-dark',
     blue: 'bg-info-soft text-info-dark',
-    purple: 'bg-purple-100 text-purple-700',
-    pink: 'bg-pink-100 text-pink-700',
+    purple: 'bg-brand-soft text-brand-dark',
+    pink: 'bg-gold-soft text-gold-dark',
     success: 'bg-success-soft text-success-dark',
   }
   const Comp = onClick ? 'button' : 'div'
   return (
     <Comp
       onClick={onClick}
-      className={`${onClick ? 'text-left hover:shadow-md cursor-pointer transition' : ''} bg-card rounded-2xl border border-line shadow-sm p-3 sm:p-4 flex items-center gap-3 sm:gap-4 animate-pop`}
+      className={`${onClick ? 'text-left hover:shadow-md cursor-pointer transition' : ''} bg-card rounded-xl border border-line shadow-sm p-4 flex items-center gap-3 animate-pop`}
     >
       <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl grid place-items-center shrink-0 ${tones[tone] || tones.brand}`}>
         <Icon size={20} className="sm:hidden" />
         <Icon size={22} className="hidden sm:block" />
       </div>
       <div className="min-w-0">
-        <div className="text-[10px] sm:text-xs font-medium text-muted uppercase tracking-wide truncate">{label}</div>
+        <div className="type-label text-muted truncate">{label}</div>
         <div className="text-lg sm:text-xl font-extrabold text-night font-mono leading-tight truncate">{value}</div>
-        {sub && <div className="text-[11px] sm:text-xs text-muted truncate">{sub}</div>}
+        {sub && <div className="type-caption text-muted truncate">{sub}</div>}
       </div>
     </Comp>
   )
@@ -41,19 +41,19 @@ export function StatCard({ icon: Icon, label, value, sub, tone = 'brand', onClic
 
 const buttonVariants = {
   primary: 'bg-brand hover:bg-brand-dark text-white shadow-sm',
-  gradient: 'bg-gradient-to-r from-brand to-brand-dark text-white shadow-md shadow-brand/25 hover:shadow-lg hover:shadow-brand/40 active:scale-[0.98] active:brightness-95 transition-all duration-200',
-  gradientSuccess: 'bg-gradient-to-r from-success to-success-dark text-white shadow-md shadow-success/25 hover:shadow-lg hover:shadow-success/40 active:scale-[0.98] active:brightness-95 transition-all duration-200',
-  gradientDanger: 'bg-gradient-to-r from-danger to-danger-dark text-white shadow-md shadow-danger/25 hover:shadow-lg hover:shadow-danger/40 active:scale-[0.98] active:brightness-95 transition-all duration-200',
+  gradient: 'bg-gradient-to-r from-brand to-brand-dark text-white shadow-md shadow-brand/20 hover:shadow-lg hover:shadow-brand/30 active:scale-[0.98] active:brightness-95 transition-all duration-200 dark:from-brand-soft dark:to-brand-dark',
+  gradientSuccess: 'bg-gradient-to-r from-success to-success-dark text-white shadow-md shadow-success/20 hover:shadow-lg hover:shadow-success/30 active:scale-[0.98] active:brightness-95 transition-all duration-200 dark:from-success-soft dark:to-success-dark',
+  gradientDanger: 'bg-gradient-to-r from-danger to-danger-dark text-white shadow-md shadow-danger/20 hover:shadow-lg hover:shadow-danger/30 active:scale-[0.98] active:brightness-95 transition-all duration-200 dark:from-danger-soft dark:to-danger-dark',
   dark: 'bg-night hover:bg-night-light text-white',
-  ghost: 'bg-transparent hover:bg-line text-night',
-  outline: 'border border-line hover:bg-page text-night bg-card',
+  ghost: 'bg-transparent hover:bg-line/60 text-night',
+  outline: 'border border-line hover:bg-page/80 text-night bg-card',
   dangerOutline: 'border border-danger text-danger hover:bg-danger-soft bg-card',
   outlineBrand: 'border border-brand text-brand hover:bg-brand-soft bg-card',
-  danger: 'bg-danger hover:opacity-90 text-white',
-  gold: 'bg-gold hover:opacity-90 text-white',
-  amber: 'bg-warning hover:opacity-90 text-white',
-  blue: 'bg-info hover:bg-info-dark text-white',
-  success: 'bg-success hover:bg-success-dark text-white shadow-sm',
+  danger: 'bg-danger hover:opacity-90 text-white dark:bg-danger-soft',
+  gold: 'bg-gold hover:opacity-90 text-white dark:bg-gold-soft',
+  amber: 'bg-warning hover:opacity-90 text-white dark:bg-warning-soft',
+  blue: 'bg-info hover:opacity-90 text-white dark:bg-info-soft',
+  success: 'bg-success hover:opacity-90 text-white shadow-sm dark:bg-success-soft',
 }
 export function Button({ children, onClick, variant = 'primary', className = '', type = 'button', disabled, title }) {
   return (
@@ -62,9 +62,94 @@ export function Button({ children, onClick, variant = 'primary', className = '',
       title={title}
       onClick={onClick}
       disabled={disabled}
-      className={`px-4 py-2 rounded-xl font-semibold text-sm transition disabled:opacity-40 disabled:cursor-not-allowed ${buttonVariants[variant] || buttonVariants.primary} ${className}`}
+      className={`min-h-[44px] px-4 py-2 rounded-lg font-semibold text-sm transition disabled:opacity-40 disabled:cursor-not-allowed ${buttonVariants[variant] || buttonVariants.primary} ${className}`}
     >
       {children}
+    </button>
+  )
+}
+
+// Botón con estados vivos (idle → loading → success → error) para evitar el
+// doble-toque en acciones críticas (cobrar, cancelar). Anti doble-toque:
+// mientras está en loading no acepta otro clic. Feedback inmediato = percepción
+// de velocidad (Informe Analítico §2.3).
+export function AsyncButton({ children, onClick, variant = 'primary', className = '', type = 'button', disabled, labels, loadingText = 'Procesando…', successText = '¡Listo!', errorText = 'Error — reintentar' }) {
+  const [status, setStatus] = React.useState('idle')
+  const handle = async () => {
+    if (status !== 'idle' || disabled) return
+    setStatus('loading')
+    try {
+      await onClick()
+      setStatus('success')
+    } catch {
+      setStatus('error')
+    } finally {
+      setTimeout(() => setStatus('idle'), 1600)
+    }
+  }
+  const content = {
+    idle: children,
+    loading: <>{loadingText}</>,
+    success: <>{successText}</>,
+    error: <>{errorText}</>,
+  }
+  const statusClass = status === 'success' ? 'bg-success hover:opacity-90' : status === 'error' ? 'bg-danger hover:opacity-90 animate-pulse' : ''
+  return (
+    <button
+      type={type}
+      onClick={handle}
+      disabled={disabled || status === 'loading'}
+      aria-live="polite"
+      data-status={status}
+      className={`min-h-[44px] px-4 py-2 rounded-lg font-semibold text-sm text-white transition disabled:opacity-40 disabled:cursor-not-allowed ${buttonVariants[variant] || buttonVariants.primary} ${statusClass} ${className}`}
+    >
+      {content[status]}
+    </button>
+  )
+}
+
+// Confirmación por mantener presionado (hold-to-confirm) para acciones destructivas
+// (anular comanda). Reemplaza el diálogo "¿Estás seguro?" que los meseros ignoran.
+export function HoldToConfirm({ onConfirm, label = 'Mantén para confirmar', holdMs = 1200, className = '', danger = true }) {
+  const [progress, setProgress] = React.useState(0)
+  const [done, setDone] = React.useState(false)
+  const timer = React.useRef(null)
+  const raf = React.useRef(null)
+  const start = () => {
+    if (done) return
+    const t0 = Date.now()
+    const tick = () => {
+      const p = Math.min(1, (Date.now() - t0) / holdMs)
+      setProgress(p)
+      if (p >= 1) {
+        setDone(true)
+        onConfirm()
+        return
+      }
+      raf.current = requestAnimationFrame(tick)
+    }
+    raf.current = requestAnimationFrame(tick)
+    timer.current = setTimeout(() => cancel(), holdMs + 50)
+  }
+  const cancel = () => {
+    if (raf.current) cancelAnimationFrame(raf.current)
+    if (timer.current) clearTimeout(timer.current)
+    setProgress(0)
+  }
+  React.useEffect(() => () => cancel(), [])
+  return (
+    <button
+      type="button"
+      onPointerDown={start}
+      onPointerUp={cancel}
+      onPointerLeave={cancel}
+      className={`relative w-full min-h-[44px] overflow-hidden rounded-xl border-2 font-semibold select-none transition ${danger ? 'border-danger text-danger' : 'border-brand text-brand'} ${className}`}
+    >
+      <span
+        className={`absolute inset-0 origin-left ${danger ? 'bg-danger/20' : 'bg-brand/20'}`}
+        style={{ transform: `scaleX(${progress})` }}
+      />
+      <span className="relative">{done ? 'Confirmado' : label}</span>
     </button>
   )
 }
@@ -75,7 +160,7 @@ const badgeTones = {
   danger: 'bg-danger-soft text-danger-dark',
   gold: 'bg-gold-soft text-gold-dark',
   blue: 'bg-info-soft text-info-dark',
-  purple: 'bg-purple-100 text-purple-700',
+  purple: 'bg-brand-soft text-brand-dark',
   amber: 'bg-warning-soft text-warning-dark',
   success: 'bg-success-soft text-success-dark',
   info: 'bg-info-soft text-info-dark',
@@ -94,27 +179,25 @@ export function Badge({ children, tone = 'muted', className = '' }) {
 export function Field({ label, children, hint }) {
   return (
     <label className="block">
-      <span className="block text-xs font-semibold text-muted mb-1">{label}</span>
+      <span className="block type-caption text-muted mb-1">{label}</span>
       {children}
       {hint && <span className="block text-[11px] text-muted mt-0.5">{hint}</span>}
     </label>
   )
 }
 
-const inputBase = 'w-full px-3 py-2 rounded-xl border border-line bg-card text-night text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand-soft transition'
-export function Input(props) {
-  return <input {...props} className={`${inputBase} ${props.className || ''}`} />
-}
-export function Textarea(props) {
-  return <textarea {...props} className={`${inputBase} ${props.className || ''}`} />
-}
-export function Select(props) {
-  return (
-    <select {...props} className={`${inputBase} ${props.className || ''}`}>
-      {props.children}
-    </select>
-  )
-}
+const inputBase = 'w-full px-3 py-2 rounded-lg border border-line bg-card text-night text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition'
+export const Input = forwardRef((props, ref) => (
+  <input ref={ref} {...props} className={`${inputBase} ${props.className || ''}`} />
+))
+export const Textarea = forwardRef((props, ref) => (
+  <textarea ref={ref} {...props} className={`${inputBase} ${props.className || ''}`} />
+))
+export const Select = forwardRef((props, ref) => (
+  <select ref={ref} {...props} className={`${inputBase} ${props.className || ''}`}>
+    {props.children}
+  </select>
+))
 
 export function Toggle({ checked, onChange, label }) {
   return (
@@ -133,7 +216,7 @@ export function Tabs({ items, value, onChange, className = '', activeClassName, 
     <div className={`flex flex-wrap gap-1 bg-page rounded-xl p-1 ${className}`}>
       {items.map((it) => {
         const active = value === it.id
-        const activeCls = activeClassName || 'bg-card shadow-sm text-brand-dark'
+        const activeCls = activeClassName || 'bg-brand text-white shadow-sm'
         const inactiveCls = inactiveClassName || 'text-muted hover:text-night'
         return (
           <button key={it.id} onClick={() => onChange(it.id)} className={`${base} ${active ? activeCls : inactiveCls}`}>
@@ -173,7 +256,7 @@ export function SearchInput({ value, onChange, placeholder = 'Buscar…', classN
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full pl-9 pr-3 py-2 rounded-xl border border-line bg-card text-night text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand-soft transition"
+        className="w-full pl-9 pr-3 py-2 rounded-lg border border-line bg-card text-night text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition"
       />
     </div>
   )
@@ -181,21 +264,21 @@ export function SearchInput({ value, onChange, placeholder = 'Buscar…', classN
 
 export function EmptyState({ icon = '📭', title, message, action }) {
   return (
-    <div className="text-center py-10">
-      <div className="text-4xl mb-2">{icon}</div>
-      <div className="font-bold text-night">{title}</div>
-      {message && <p className="text-sm text-muted mt-1">{message}</p>}
-      {action && <div className="mt-4 flex justify-center">{action}</div>}
+    <div className="text-center py-12">
+      <div className="text-4xl mb-3">{icon}</div>
+      <div className="type-h3 text-night">{title}</div>
+      {message && <p className="type-body text-muted mt-2 max-w-xs mx-auto">{message}</p>}
+      {action && <div className="mt-6 flex justify-center">{action}</div>}
     </div>
   )
 }
 
 export function PageHeader({ title, subtitle, actions }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
       <div>
-        <h2 className="text-xl font-bold text-night">{title}</h2>
-        {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
+        <h2 className="type-h2 text-night">{title}</h2>
+        {subtitle && <p className="type-body text-muted mt-1">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
@@ -205,12 +288,12 @@ export function PageHeader({ title, subtitle, actions }) {
 export function QtyStepper({ value, onChange, min = 0, max = 999, size = 'md' }) {
   const btn = size === 'lg' ? 'w-10 h-10 text-xl' : 'w-8 h-8'
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <button
         type="button"
         onClick={() => onChange(Math.max(min, (value || 0) - 1))}
         disabled={value <= min}
-        className={`${btn} grid place-items-center rounded-xl border border-line bg-card text-night hover:bg-line disabled:opacity-30 transition`}
+        className={`${btn} grid place-items-center rounded-lg border border-line bg-card text-night hover:bg-line disabled:opacity-30 transition`}
       >
         −
       </button>
@@ -219,7 +302,7 @@ export function QtyStepper({ value, onChange, min = 0, max = 999, size = 'md' })
         type="button"
         onClick={() => onChange(Math.min(max, (value || 0) + 1))}
         disabled={value >= max}
-        className={`${btn} grid place-items-center rounded-xl border border-line bg-card text-brand hover:bg-brand-soft disabled:opacity-30 transition`}
+        className={`${btn} grid place-items-center rounded-lg border border-line bg-card text-brand hover:bg-brand-soft disabled:opacity-30 transition`}
       >
         +
       </button>
@@ -231,10 +314,10 @@ export function Modal({ open, onClose, title, children, maxW = 'max-w-md', zInde
   if (!open) return null
   return (
     <div className={`fixed inset-0 ${zIndex} grid place-items-center p-4 bg-night/40 backdrop-blur-sm`} onClick={onClose}>
-      <Card className={`w-full ${maxW} p-5 animate-pop max-h-[90vh] overflow-auto`}>
+      <Card className={`w-full ${maxW} p-6 animate-pop max-h-[90vh] overflow-auto`}>
         <div onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-night">{title}</h3>
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="type-h3 text-night">{title}</h3>
             <button onClick={onClose} className="w-8 h-8 grid place-items-center rounded-lg text-muted hover:text-danger hover:bg-danger-soft text-xl leading-none transition close-glow">
               ×
             </button>
@@ -250,11 +333,11 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirmar'
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4 bg-night/50 backdrop-blur-sm" onClick={onCancel}>
-      <Card className="w-full max-w-sm p-5 animate-pop">
+      <Card className="w-full max-w-sm p-6 animate-pop">
         <div onClick={(e) => e.stopPropagation()}>
-          <h3 className="text-lg font-bold text-night">{title}</h3>
-          {message && <p className="text-sm text-muted mt-1.5">{message}</p>}
-          <div className="flex gap-2 mt-5">
+          <h3 className="type-h3 text-night">{title}</h3>
+          {message && <p className="type-body text-muted mt-2">{message}</p>}
+          <div className="flex gap-3 mt-6">
             <Button variant="outline" className="flex-1" onClick={onCancel}>
               {cancelLabel}
             </Button>
@@ -300,10 +383,10 @@ export function ToastViewport() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`bg-card border border-line border-l-4 ${tones[t.type] || tones.info} rounded-xl shadow-lg p-3 animate-pop`}
+          className={`bg-card border border-line border-l-4 ${tones[t.type] || tones.info} rounded-xl shadow-lg p-4 animate-pop`}
         >
           {t.messages.map((m, i) => (
-            <div key={i} className="text-sm text-night font-medium">
+            <div key={i} className="type-body text-night font-medium">
               {m}
             </div>
           ))}

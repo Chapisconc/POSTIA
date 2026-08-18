@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import { Camera, ShoppingBag, Truck, ChevronDown } from 'lucide-react'
+import { Camera, ShoppingBag, Truck } from 'lucide-react'
 import { toastErr } from '../../lib/notify'
 
 export default function NuevoPedidoDropdown({ open, onClose, onSelect }) {

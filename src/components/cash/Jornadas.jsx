@@ -93,7 +93,7 @@ export default function Jornadas({ state, refresh, onNav, params, user }) {
                 <button className="w-full text-left p-4 hover:bg-page/50 transition" onClick={() => setOpenId(open ? null : c.id)}>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className={`w-10 h-10 rounded-xl grid place-items-center shrink-0 ${abierta ? 'bg-emerald-100 text-emerald-700' : 'bg-gold-soft text-gold'}`}>
+                      <div className={`w-10 h-10 rounded-xl grid place-items-center shrink-0 ${abierta ? 'bg-success-soft text-success-dark' : 'bg-gold-soft text-gold'}`}>
                         <CalendarClock size={18} />
                       </div>
                       <div className="min-w-0">
@@ -140,9 +140,9 @@ export default function Jornadas({ state, refresh, onNav, params, user }) {
                         { label: 'Diferencia', v: diff != null ? `${diff >= 0 ? '+' : '−'}${fmtMoney(Math.abs(diff))}` : '—', colored: true },
                         { label: 'Redondeos', v: fmtMoney(s.rounding) },
                       ].map((x) => (
-                        <div key={x.label} className={`rounded-xl p-3 ${x.colored ? (diff > 0.001 ? 'bg-emerald-50' : diff < -0.001 ? 'bg-danger-soft' : 'bg-page') : 'bg-page'}`}>
+                        <div key={x.label} className={`rounded-xl p-3 ${x.colored ? (diff > 0.001 ? 'bg-success-soft' : diff < -0.001 ? 'bg-danger-soft' : 'bg-page') : 'bg-page'}`}>
                           <div className="text-[10px] uppercase text-muted font-bold">{x.label}</div>
-                          <div className={`font-mono font-bold mt-0.5 ${x.colored ? (diff > 0.001 ? 'text-emerald-700' : diff < -0.001 ? 'text-danger' : 'text-night') : 'text-night'}`}>{x.v}</div>
+                          <div className={`font-mono font-bold mt-0.5 ${x.colored ? (diff > 0.001 ? 'text-success-dark' : diff < -0.001 ? 'text-danger' : 'text-night') : 'text-night'}`}>{x.v}</div>
                         </div>
                       ))}
                     </div>
@@ -202,7 +202,7 @@ export default function Jornadas({ state, refresh, onNav, params, user }) {
                               <div key={e.id} className="bg-page rounded-xl px-3 py-2 text-sm">
                                 <div className="flex justify-between gap-2">
                                   <span className="font-semibold text-night truncate">{e.concept}</span>
-                                  <span className="font-mono font-bold text-emerald-700 shrink-0">{fmtMoney(e.amount)}</span>
+                                  <span className="font-mono font-bold text-success-dark shrink-0">{fmtMoney(e.amount)}</span>
                                 </div>
                                 <div className="text-[11px] text-muted">
                                   {methodEmoji(e.method)} {methodLabel(e.method)} · {fmtTime(e.date)}

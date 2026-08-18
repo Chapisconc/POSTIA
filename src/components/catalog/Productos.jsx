@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react'
 import {
-  Package, Plus, Pencil, Trash2, Star, Layers, BadgePercent,
+  Plus, Pencil, Trash2, Star, BadgePercent,
 } from 'lucide-react'
 import {
-  Card, Button, Badge, Field, Input, Select, Textarea, Modal, ConfirmDialog,
+  Card, Button, Badge, Select, ConfirmDialog,
   Toggle, SearchInput, EmptyState, PageHeader,
 } from '../ui'
 import { addProduct, updateProduct, deleteProduct, categoryName } from '../../lib/storage'

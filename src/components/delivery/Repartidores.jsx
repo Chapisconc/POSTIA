@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  Card, Button, Badge, Field, Input, Select, Modal, Toggle, ConfirmDialog,
+  Card, Button, Badge, Field, Input, Modal, Toggle, ConfirmDialog,
   PageHeader, StatCard, EmptyState,
 } from '../ui'
 import { fmtMoney, fmtNum, fmtDateTime } from '../../lib/format'
@@ -164,9 +164,9 @@ export default function Repartidores({ state, refresh, onNav, params, user }) {
                 </div>
 
                 {cur && curAddr ? (
-                  <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2">
+                  <div className="rounded-xl bg-warning-soft border border-warning px-3 py-2">
                     <div className="flex items-start gap-1.5">
-                      <MapPin size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                      <MapPin size={14} className="text-warning shrink-0 mt-0.5" />
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-night">Pedido #{cur.folio}</div>
                         <div className="text-xs text-muted truncate">{curAddr}{cur.client?.colony ? ` · ${cur.client.colony}` : ''}</div>
@@ -178,7 +178,7 @@ export default function Repartidores({ state, refresh, onNav, params, user }) {
                 )}
 
                 <div className="flex items-center justify-between text-xs text-muted border-t border-line pt-2">
-                  <span className={`font-semibold ${r.active !== false ? 'text-emerald-700' : 'text-danger'}`}>
+                  <span className={`font-semibold ${r.active !== false ? 'text-success-dark' : 'text-danger'}`}>
                     {r.active !== false ? '✅ Activo' : '⛔ Inactivo'}
                   </span>
                   <span className="font-semibold"><CheckCircle2 size={12} className="inline text-brand mr-1" />{fmtNum(r.deliveriesCount || 0)} entregas</span>

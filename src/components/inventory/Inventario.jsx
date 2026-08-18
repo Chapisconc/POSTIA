@@ -197,7 +197,7 @@ export default function Inventario({ state, refresh, onNav, user }) {
                             {actionBtn('Entrada', 'hover:bg-brand', () => openMov('entrada', i), PackagePlus)}
                             {actionBtn('Salida', 'hover:bg-danger', () => openMov('salida', i), PackageMinus)}
                             {actionBtn('Ajustar', 'hover:bg-sky-600', () => openMov('ajuste', i), SlidersHorizontal)}
-                            {actionBtn('Merma', 'hover:bg-amber-500', () => openMov('merma', i), Recycle)}
+                            {actionBtn('Merma', 'hover:bg-warning', () => openMov('merma', i), Recycle)}
                             {actionBtn('Historial', 'hover:bg-night', () => setHist(i), History)}
                             {actionBtn('Editar', 'hover:bg-brand-dark', () => openEdit(i), Pencil)}
                             {actionBtn('Eliminar', 'hover:bg-danger', () => setDelTarget(i), Trash2)}

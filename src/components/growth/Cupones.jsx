@@ -201,46 +201,65 @@ export default function Cupones({ state, refresh }) {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Editar cupón' : 'Nuevo cupón'} maxW="max-w-xl">
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <div className="rounded-xl bg-page/60 border border-line p-3.5">
+            <p className="type-caption text-muted">
+              Un <strong className="text-night">cupón</strong> es un código de descuento. Ej. <code className="px-1.5 py-0.5 rounded bg-night text-white">BIENVENIDA10</code>
+              que quite el 10% o un monto fijo al momento de pagar.
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Código">
-              <Input value={form.code} onChange={(e) => set('code', e.target.value.toUpperCase())} placeholder="BIENVENIDO10" className="font-mono uppercase" />
+            <Field label="Código *">
+              <Input value={form.code} onChange={(e) => set('code', e.target.value.toUpperCase())} placeholder="BIENVENIDA10" className="font-mono uppercase" />
+              <p className="type-caption text-muted mt-1">Código que el cliente escribe al pagar.</p>
             </Field>
-            <Field label="Nombre">
+            <Field label="Nombre interno *">
               <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Bienvenida 10%" />
+              <p className="type-caption text-muted mt-1">Nombre para identificarlo en tu lista de cupones.</p>
             </Field>
           </div>
+
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Tipo">
+            <Field label="Tipo de descuento">
               <Select value={form.type} onChange={(e) => set('type', e.target.value)}>
                 <option value="percent">Porcentaje</option>
                 <option value="fixed">Monto fijo</option>
               </Select>
             </Field>
-            <Field label={form.type === 'percent' ? 'Valor %' : 'Valor $'}>
-              <Input type="number" min="0" step="any" value={form.value} onChange={(e) => set('value', e.target.value)} />
+            <Field label={form.type === 'percent' ? 'Descuento (%)' : 'Descuento ($)'}>
+              <Input type="number" min="0" step={form.type === 'percent' ? '1' : '0.01'} value={form.value} onChange={(e) => set('value', e.target.value)} />
+              <p className="type-caption text-muted mt-1">{form.type === 'percent' ? 'Ej. 10 = 10% de descuento' : 'Ej. 50 = $50 de descuento'}</p>
             </Field>
             <Field label="Compra mínima">
               <Input type="number" min="0" step="any" value={form.minPurchase} onChange={(e) => set('minPurchase', e.target.value)} />
+              <p className="type-caption text-muted mt-1">Monto mínimo para que aplique. 0 = sin mínimo.</p>
             </Field>
           </div>
+
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Inicio">
+            <Field label="Fecha de inicio">
               <Input type="date" value={form.start} onChange={(e) => set('start', e.target.value)} />
+              <p className="type-caption text-muted mt-1">Desde cuándo es válido (opcional).</p>
             </Field>
-            <Field label="Fin">
+            <Field label="Fecha de fin">
               <Input type="date" value={form.end} onChange={(e) => set('end', e.target.value)} />
+              <p className="type-caption text-muted mt-1">Hasta cuándo es válido (opcional).</p>
             </Field>
-            <Field label="Máx. usos" hint="0 = ilimitado">
+            <Field label="Máximo de usos" hint="0 = ilimitado">
               <Input type="number" min="0" value={form.maxUses} onChange={(e) => set('maxUses', e.target.value)} />
+              <p className="type-caption text-muted mt-1">¿Cuántas personas pueden usarlo? 0 = ilimitado.</p>
             </Field>
           </div>
+
           <Field label="Cliente exclusivo (opcional)">
             <Select value={form.clientId} onChange={(e) => set('clientId', e.target.value)}>
               <option value="">Todos los clientes</option>
               {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
+            <p className="type-caption text-muted mt-1">Si seleccionas un cliente, solo él podrá usar este cupón.</p>
           </Field>
+
           {categories.length > 0 && (
             <Field label="Categorías (vacío = todas)">
               <div className="flex flex-wrap gap-1.5 max-h-24 overflow-auto">
@@ -254,8 +273,10 @@ export default function Cupones({ state, refresh }) {
                   )
                 })}
               </div>
+              <p className="type-caption text-muted mt-1">Selecciona categorías para limitar el descuento.</p>
             </Field>
           )}
+
           {products.length > 0 && (
             <Field label="Productos (vacío = todos)">
               <div className="flex flex-wrap gap-1.5 max-h-28 overflow-auto">
@@ -269,10 +290,17 @@ export default function Cupones({ state, refresh }) {
                   )
                 })}
               </div>
+              <p className="type-caption text-muted mt-1">Selecciona productos específicos para el descuento.</p>
             </Field>
           )}
-          <Toggle checked={form.active} onChange={(v) => set('active', v)} label="Cupón activo" />
-          <div className="flex gap-2 pt-2">
+
+          <div className="flex items-center gap-2">
+            <Toggle checked={form.active} onChange={(v) => set('active', v)} />
+            <span className="text-sm text-night">Este cupón está activo</span>
+          </div>
+          <p className="type-caption text-muted">Desactívalo si ya no quieres que se aplique, pero conserva el historial.</p>
+
+          <div className="flex gap-2 pt-2 border-t border-line">
             <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancelar</Button>
             <Button className="flex-1" onClick={save}>{editing ? 'Guardar' : 'Crear cupón'}</Button>
           </div>

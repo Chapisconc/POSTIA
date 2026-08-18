@@ -1,12 +1,38 @@
 // POSTIA — Capa de datos v2 — POS de restaurante completo, persistencia en localStorage.
 // Sincronización con Supabase para persistencia remota y multi-dispositivo.
-import { supabase, syncOrderToSupabase, acquirePayLock, releasePayLock } from './supabase-client'
+import {
+  supabase, syncOrderToSupabase, deleteOrderFromSupabase, acquirePayLock, releasePayLock,
+  syncProductToSupabase, deleteProductFromSupabase,
+  syncCategoryToSupabase, deleteCategoryFromSupabase,
+  syncTableToSupabase, deleteTableFromSupabase,
+  syncClientToSupabase, deleteClientFromSupabase,
+  syncRiderToSupabase, deleteRiderFromSupabase,
+  syncUserToSupabase, deleteUserFromSupabase,
+  syncSettingsToSupabase,
+  syncModGroupToSupabase, deleteModGroupFromSupabase,
+  syncCouponToSupabase, deleteCouponFromSupabase,
+  syncCampaignToSupabase, deleteCampaignFromSupabase,
+  syncSalonToSupabase, deleteSalonFromSupabase,
+  syncMenuDigitalToSupabase,
+  acquireOrderLock as acquireOrderLockRpc, releaseOrderLock as releaseOrderLockRpc, getMachineIdPublic,
+} from './supabase-client'
 
 const KEY = 'pdv_state_v2'
 const USER_KEY = 'pdv_current_user'
 
-export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+// Generador de IDs tipo UUID (v4) para que el merge local↔Supabase deduplique por id.
+function uuidv4() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+export const uid = () => uuidv4()
 export const nowISO = () => new Date().toISOString()
+// Lanza la sincronización remota en segundo plano sin bloquear el flujo local.
+const syncBg = (fn) => { if (fn) fn().catch(e => console.error('Supabase sync error:', e?.message)) }
 export const todayKey = () => new Date().toISOString().slice(0, 10)
 
 export const ORDER_STATUS = ['nuevo', 'preparando', 'listo', 'porcobrar', 'finalizado', 'cancelado']
@@ -24,6 +50,23 @@ export const ORDER_STATUS_LABEL = {
 }
 export const KITCHEN_STATUS_LABEL = { nuevo: 'Nuevo', preparando: 'Preparando', listo: 'Listo', entregado: 'Entregado' }
 export const SERVICE_LABEL = { mesa: 'Mesa', mostrador: 'Mostrador', domicilio: 'Domicilio', menudigital: 'Menú digital' }
+
+// Transiciones de estado de pedido permitidas. Una vez aceptado (ya no es
+// "nuevo"/pendiente) no se puede volver a pendiente; solo avanzar hacia
+// "finalizado" (y cancelar). "nuevo" nunca es destino de una transición.
+export const ORDER_TRANSITIONS = {
+  nuevo: ['preparando', 'cancelado'],
+  preparando: ['listo', 'porcobrar', 'finalizado', 'cancelado'],
+  listo: ['porcobrar', 'finalizado', 'cancelado'],
+  porcobrar: ['finalizado', 'cancelado'],
+  finalizado: [],
+  cancelado: [],
+}
+
+export function canTransitionStatus(from, to) {
+  if (from === to) return true
+  return (ORDER_TRANSITIONS[from] || []).includes(to)
+}
 export const TABLE_STATUS = ['libre', 'ocupada', 'cuenta', 'pagada']
 
 const sum = (arr, f) => arr.reduce((a, x) => a + (f(x) || 0), 0)
@@ -171,13 +214,15 @@ export function updateSettings(patch) {
     delivery: { ...s.settings.delivery, ...(patch.delivery || {}) },
   }
   writeState(s)
+  syncBg(() => syncSettingsToSupabase(s.settings))
   return s
 }
 export function getMenuDigital() { return readState().menuDigital }
 export function updateMenuDigital(patch) {
   const s = readState()
-  s.menuDigital = { ...s.menuDigital, ...patch, services: { ...s.menuDigital.services, ...(patch.services || {}) } }
+  s.menuDigital = { ...s.menuDigital, ...patch, services: { ...s.menuDigital.services, ...(patch.services || {}) }, updatedAt: nowISO() }
   writeState(s)
+  syncBg(() => syncMenuDigitalToSupabase(s.menuDigital))
   return s
 }
 
@@ -191,21 +236,25 @@ export function saveRole(roleId, permissions) {
 }
 export function addUser(u) {
   const s = readState()
-  s.users.push({ id: uid(), name: u.name, role: u.role || 'cajero', password: u.password || '1234', active: u.active !== false })
+  const user = { id: uid(), name: u.name, role: u.role || 'cajero', password: u.password || '1234', active: u.active !== false, updatedAt: nowISO() }
+  s.users.push(user)
   writeState(s)
+  syncBg(() => syncUserToSupabase(user))
   return s
 }
 export function updateUser(id, patch) {
   const s = readState()
   const i = s.users.findIndex((u) => u.id === id)
-  if (i >= 0) s.users[i] = { ...s.users[i], ...patch }
+  if (i >= 0) s.users[i] = { ...s.users[i], ...patch, updatedAt: nowISO() }
   writeState(s)
+  if (i >= 0) syncBg(() => syncUserToSupabase(s.users[i]))
   return s
 }
 export function deleteUser(id) {
   const s = readState()
   s.users = s.users.filter((u) => u.id !== id)
   writeState(s)
+  syncBg(() => deleteUserFromSupabase(id))
   return s
 }
 export function login(name, password) {
@@ -227,15 +276,18 @@ export function authorizeSupervisor(password) {
 // ---- Categorías ----
 export function addCategory(c) {
   const s = readState()
-  s.categories.push({ id: uid(), name: c.name, emoji: c.emoji || '🍽️', order: s.categories.length, featured: !!c.featured })
+  const cat = { id: uid(), name: c.name, emoji: c.emoji || '🍽️', order: s.categories.length, featured: !!c.featured, updatedAt: nowISO() }
+  s.categories.push(cat)
   writeState(s)
+  syncBg(() => syncCategoryToSupabase(cat))
   return s
 }
 export function updateCategory(id, patch) {
   const s = readState()
   const i = s.categories.findIndex((x) => x.id === id)
-  if (i >= 0) s.categories[i] = { ...s.categories[i], ...patch }
+  if (i >= 0) s.categories[i] = { ...s.categories[i], ...patch, updatedAt: nowISO() }
   writeState(s)
+  if (i >= 0) syncBg(() => syncCategoryToSupabase(s.categories[i]))
   return s
 }
 export function deleteCategory(id) {
@@ -243,6 +295,7 @@ export function deleteCategory(id) {
   s.categories = s.categories.filter((x) => x.id !== id)
   s.products = s.products.map((p) => (p.categoryId === id ? { ...p, categoryId: '' } : p))
   writeState(s)
+  syncBg(() => deleteCategoryFromSupabase(id))
   return s
 }
 export function categoryName(s, id) {
@@ -252,14 +305,17 @@ export function categoryName(s, id) {
 // ---- Grupos de modificadores ----
 export function addModGroup(g) {
   const s = readState()
-  s.modGroups.push({
+  const mg = {
     id: uid(), name: g.name, type: g.type || 'sabor', required: !!g.required,
     min: Number(g.min) || 0, max: Number(g.max) || 4, surchargeSecond: g.surchargeSecond || null,
     defaultValue: g.defaultValue || '', freeCount: Number(g.freeCount) || 0,
     description: g.description || '', category: g.category || '', image: g.image || '',
     items: (g.items || []).map((it) => ({ id: uid(), name: it.name, price: Number(it.price) || 0, description: it.description || '' })),
-  })
+    updatedAt: nowISO(),
+  }
+  s.modGroups.push(mg)
   writeState(s)
+  syncBg(() => syncModGroupToSupabase(mg))
   return s
 }
 export function updateModGroup(id, patch) {
@@ -279,9 +335,11 @@ export function updateModGroup(id, patch) {
       description: (patch.description ?? cur.description ?? '').trim(),
       category: (patch.category ?? cur.category ?? '').trim(),
       image: hasImage !== undefined ? (patch.image || '') : (patch.image ?? cur.image ?? ''),
+      updatedAt: nowISO(),
     }
   }
   writeState(s)
+  if (i >= 0) syncBg(() => syncModGroupToSupabase(s.modGroups[i]))
   return s
 }
 export function deleteModGroup(id) {
@@ -289,6 +347,7 @@ export function deleteModGroup(id) {
   s.modGroups = s.modGroups.filter((x) => x.id !== id)
   s.products = s.products.map((p) => ({ ...p, modGroupIds: (p.modGroupIds || []).filter((g) => g !== id) }))
   writeState(s)
+  syncBg(() => deleteModGroupFromSupabase(id))
   return s
 }
 
@@ -302,9 +361,11 @@ export function addProduct(p) {
     featured: !!p.featured, order: Number(p.order) || 0, stock: Number(p.stock) || 0,
     unitLabel: p.unitLabel || 'pieza', lowStockAt: p.lowStockAt != null ? Number(p.lowStockAt) : 5,
     modGroupIds: p.modGroupIds || [], promo: p.promo && p.promo.bundle > 1 && p.promo.price > 0 ? p.promo : null,
+    updatedAt: nowISO(),
   }
   s.products.push(prod)
   writeState(s)
+  syncBg(() => syncProductToSupabase(prod))
   return prod
 }
 export function updateProduct(id, patch) {
@@ -312,13 +373,14 @@ export function updateProduct(id, patch) {
   const i = s.products.findIndex((p) => p.id === id)
   if (i >= 0) {
     s.products[i] = {
-      ...s.products[i], ...patch,
+      ...s.products[i], ...patch, updatedAt: nowISO(),
       price: patch.price != null ? Number(patch.price) : s.products[i].price,
       cost: patch.cost != null ? Number(patch.cost) : s.products[i].cost,
       promo: patch.promo === null ? null : patch.promo ? patch.promo : s.products[i].promo,
     }
   }
   writeState(s)
+  if (i >= 0) syncBg(() => syncProductToSupabase(s.products[i]))
   return s
 }
 export function deleteProduct(id) {
@@ -326,6 +388,7 @@ export function deleteProduct(id) {
   s.products = s.products.filter((p) => p.id !== id)
   s.inventoryMovements = s.inventoryMovements.filter((m) => m.productId !== id)
   writeState(s)
+  syncBg(() => deleteProductFromSupabase(id))
   return s
 }
 export function getProduct(s, id) { return s.products.find((p) => p.id === id) }
@@ -375,6 +438,15 @@ function applyCoupon(s, code, subtotal, serviceType, clientId) {
 
 export function createOrder({ serviceType = 'mostrador', tableId, client, items, discount = 0, discountReason = '', tip = 0, deliveryCost = 0, packagingCost = 0, couponCode, createdBy, status, kitchenStatus, title }) {
   const s = readState()
+  // Folio por día: los pedidos reinician en #1 cada día para que el usuario
+  // entienda qué número de pedido lleva en el día. El índice único de la BD
+  // es (folio_date, folio), así que folios se repiten entre días sin colisión.
+  const folioDate = todayKey()
+  const maxFolioHoy = s.orders.reduce(
+    (m, o) => (o.folioDate === folioDate ? Math.max(m, Number(o.folio) || 0) : m),
+    0
+  )
+  const folio = maxFolioHoy + 1
   const subtotal = orderSubtotal(items)
   const cp = applyCoupon(s, couponCode, subtotal, serviceType, client?.id)
   const finalDiscount = Math.max(0, Number(discount) || 0) + cp.discount
@@ -382,7 +454,7 @@ export function createOrder({ serviceType = 'mostrador', tableId, client, items,
   const shipN = Number(deliveryCost) || 0
   const packN = Number(packagingCost) || 0
   const order = {
-    id: uid(), folio: s.nextFolio,
+    id: uid(), folio, folioDate,
     serviceType, tableId: tableId || null,
     client: client ? { id: client.id, name: client.name, phone: client.phone, address: client.address, colony: client.colony, reference: client.reference } : null,
     items, subtotal,
@@ -396,8 +468,9 @@ export function createOrder({ serviceType = 'mostrador', tableId, client, items,
     createdAt: nowISO(), paidAt: null, closedAt: null, canceledAt: null, cancelReason: null,
     riderId: null,
     title: title || '',
+    updatedAt: nowISO(),
   }
-  s.nextFolio += 1
+  s.nextFolio = Math.max(s.nextFolio, folio + 1)
   s.orders.push(order)
   if (tableId) {
     const t = s.tables.find((tb) => tb.id === tableId)
@@ -407,7 +480,7 @@ export function createOrder({ serviceType = 'mostrador', tableId, client, items,
   logAudit({ user: createdBy, action: 'order.created', detail: `Pedido #${order.folio} creado (${serviceType})`, orderId: order.id, amount: order.total })
   runRules('order.nuevo', { order, state: readState() })
   // Sincronizar con Supabase en segundo plano (no bloquea el flujo)
-  syncOrderToSupabase(order).catch(e => console.error('Supabase sync createOrder error:', e.message))
+  syncBg(() => syncOrderToSupabase(order))
   return readState()
 }
 
@@ -431,12 +504,14 @@ export function updateOrder(id, patch, user) {
   if (patch.client) {
     o.client = { id: patch.client.id, name: patch.client.name, phone: patch.client.phone, address: patch.client.address, colony: patch.client.colony, reference: patch.client.reference }
   }
+  o.updatedAt = nowISO()
   recomputeOrder(s, o)
   if (patch.status && patch.status !== prevStatus) {
     handleStatusChange(s, o, prevStatus, patch.status, patch.reason, user)
   }
   writeState(s)
   logAudit({ user, action: 'order.updated', detail: `Pedido #${o.folio} actualizado`, orderId: o.id })
+  syncBg(() => syncOrderToSupabase(o))
   return readState()
 }
 
@@ -445,9 +520,11 @@ export function addItemsToOrder(orderId, items, user) {
   const o = s.orders.find((x) => x.id === orderId)
   if (!o) return readState()
   o.items = [...o.items, ...items]
+  o.updatedAt = nowISO()
   recomputeOrder(s, o)
   writeState(s)
   logAudit({ user, action: 'order.addItems', detail: `Pedido #${o.folio}: +${items.length} artículos`, orderId, amount: sum(items, (i) => i.lineTotal) })
+  syncBg(() => syncOrderToSupabase(o))
   return readState()
 }
 
@@ -462,7 +539,9 @@ export function updateOrderItem(orderId, itemId, patch) {
     if (patch.modifiers) { it.modifiers = patch.modifiers; it.price = it.unitBase + modPrice(patch.modifiers); it.lineTotal = it.qty * it.price }
   }
   recomputeOrder(s, o)
+  o.updatedAt = nowISO()
   writeState(s)
+  syncBg(() => syncOrderToSupabase(o))
   return readState()
 }
 export function removeOrderItem(orderId, itemId) {
@@ -470,10 +549,12 @@ export function removeOrderItem(orderId, itemId) {
   const o = s.orders.find((x) => x.id === orderId)
   if (o) {
     o.items = o.items.filter((i) => i.id !== itemId)
+    o.updatedAt = nowISO()
     recomputeOrder(s, o)
     if (o.items.length === 0) o.status = 'cancelado'
   }
   writeState(s)
+  syncBg(() => o && syncOrderToSupabase(o))
   return readState()
 }
 
@@ -483,6 +564,7 @@ export function setOrderStatus(id, status, { reason, user }) {
   if (!o) return readState()
   const prev = o.status
   o.status = status
+  o.updatedAt = nowISO()
   if (status === 'cancelado') {
     o.cancelReason = reason || ''
     o.canceledAt = nowISO()
@@ -492,6 +574,7 @@ export function setOrderStatus(id, status, { reason, user }) {
   writeState(s)
   logAudit({ user, action: 'order.status', detail: `Pedido #${o.folio}: ${ORDER_STATUS_LABEL[prev]} → ${ORDER_STATUS_LABEL[status]}${reason ? ` · ${reason}` : ''}`, orderId: o.id })
   runRules('order.' + status, { order: readState().orders.find((x) => x.id === id), state: readState() })
+  syncBg(() => syncOrderToSupabase(o))
   return readState()
 }
 
@@ -500,6 +583,7 @@ export function setKitchenStatus(id, kstatus, user) {
   const o = s.orders.find((x) => x.id === id)
   if (!o) return readState()
   o.kitchenStatus = kstatus
+  o.updatedAt = nowISO()
   if (kstatus === 'preparando' && o.status === 'nuevo') o.status = 'preparando'
   if (kstatus === 'listo' && o.status === 'preparando') {
     // pedidos de mostrador/mesa pasan directo a "por cobrar"; delivery/menú digital
@@ -509,6 +593,7 @@ export function setKitchenStatus(id, kstatus, user) {
   writeState(s)
   logAudit({ user, action: 'kitchen.status', detail: `Cocina: pedido #${o.folio} → ${KITCHEN_STATUS_LABEL[kstatus]}`, orderId: o.id })
   runRules('order.' + kstatus, { order: readState().orders.find((x) => x.id === id), state: readState() })
+  syncBg(() => syncOrderToSupabase(o))
   return readState()
 }
 
@@ -528,7 +613,7 @@ export function payOrder(orderId, { payment, cashReceived, user }) {
   const s = readState()
   const o = s.orders.find((x) => x.id === orderId)
   if (!o || o.paid) return readState()
-  const machineId = user?.id || 'local'
+  const machineId = getMachineIdPublic()
   // Adquirir lock de cobro para multi-máquina (no bloqueante)
   acquirePayLock(orderId, machineId).catch(e => console.error('Supabase acquire lock error:', e.message))
   const info = paymentBreakdown(o.total, payment)
@@ -548,14 +633,68 @@ export function payOrder(orderId, { payment, cashReceived, user }) {
     session.sales.push({ orderId: o.id, folio: o.folio, method: payment, base: o.total, commission: info.commission, charge: info.charge, rounding: info.rounding, date: nowISO(), user: user?.name })
   }
   if (o.couponId) { const c = s.coupons.find((x) => x.id === o.couponId); if (c) c.usedCount = (c.usedCount || 0) + 1 }
+  o.updatedAt = nowISO()
   writeState(s)
   logAudit({ user, action: 'order.paid', detail: `Pedido #${o.folio} cobrado (${payment})`, orderId, amount: o.total })
   runRules('order.paid', { order: readState().orders.find((x) => x.id === orderId), state: readState() })
   // Liberar el lock de cobro para multi-máquina
   releasePayLock(o.id).catch(e => console.error('Supabase release lock error:', e.message))
   // Sincronizar con Supabase
-  syncOrderToSupabase(o).catch(e => console.error('Supabase sync payOrder error:', e.message))
+  syncBg(() => syncOrderToSupabase(o))
   return readState()
+}
+
+// --- Order Locking ---
+// Prevents concurrent editing: when User A opens an order, User B sees a lock banner and cannot modify it.
+// Uses the existing locked_by / locked_at columns on orders.
+const LOCK_TTL_MS = 5 * 60 * 1000 // 5 min — locks auto-expire
+
+/** Returns { locked: true, by: 'Name', since: Date } or { locked: false } */
+export function isOrderLocked(order, currentUser) {
+  if (!order?.lockedBy) return { locked: false }
+  // Same user = not locked (they own the lock)
+  if (currentUser?.id && order.lockedBy === currentUser.id) return { locked: false }
+  if (order.lockedBy === getMachineIdPublic()) return { locked: false }
+  // Check TTL
+  if (order.lockedAt) {
+    const age = Date.now() - new Date(order.lockedAt).getTime()
+    if (age > LOCK_TTL_MS) return { locked: false } // stale lock
+  }
+  // Look up user name
+  const s = readState()
+  const locker = s.users?.find(u => u.id === order.lockedBy)
+  return { locked: true, by: locker?.name || 'Otro usuario', since: order.lockedAt }
+}
+
+/** Acquire editing lock on an order (atomic via RPC, local fallback) */
+export function acquireOrderLock(orderId, user) {
+  const s = readState()
+  const o = s.orders.find(x => x.id === orderId)
+  if (!o) return false
+  // Don't override own lock
+  if (o.lockedBy && o.lockedBy !== getMachineIdPublic() && o.lockedBy !== user?.id) return false
+  o.lockedBy = user?.id || getMachineIdPublic()
+  o.lockedAt = nowISO()
+  o.updatedAt = nowISO()
+  writeState(s)
+  // Try atomic remote lock (best-effort)
+  acquireOrderLockRpc(orderId, user?.id).catch(e => console.error('Supabase acquire order lock error:', e?.message))
+  syncBg(() => syncOrderToSupabase(o))
+  return true
+}
+
+/** Release editing lock */
+export function releaseOrderLock(orderId) {
+  const s = readState()
+  const o = s.orders.find(x => x.id === orderId)
+  if (!o) return
+  o.lockedBy = null
+  o.lockedAt = null
+  o.updatedAt = nowISO()
+  writeState(s)
+  // Release remote lock (best-effort)
+  releaseOrderLockRpc(orderId).catch(e => console.error('Supabase release order lock error:', e?.message))
+  syncBg(() => syncOrderToSupabase(o))
 }
 
 export function cancelOrder(orderId, { reason, user }) {
@@ -574,8 +713,12 @@ export function assignRider(orderId, riderId) {
     if (o.status === 'listo' || o.status === 'porcobrar') r.status = 'encamino'
     if (o.status === 'listo' && o.kitchenStatus === 'listo') o.status = 'porcobrar'
   }
+  o.updatedAt = nowISO()
+  r.updatedAt = nowISO()
   writeState(s)
   logAudit({ user: getCurrentUser(), action: 'delivery.assign', detail: `Repartidor ${r.name} asignado a #${o.folio}`, orderId, amount: o.total })
+  syncBg(() => syncOrderToSupabase(o))
+  syncBg(() => syncRiderToSupabase(r))
   return readState()
 }
 export function setRiderStatus(riderId, status, orderId) {
@@ -585,23 +728,28 @@ export function setRiderStatus(riderId, status, orderId) {
     r.status = status
     r.currentOrderId = status === 'disponible' ? null : orderId || r.currentOrderId
     if (status === 'disponible') r.deliveriesCount = (r.deliveriesCount || 0) + 1
+    r.updatedAt = nowISO()
   }
   writeState(s)
+  if (r) syncBg(() => syncRiderToSupabase(r))
   return readState()
 }
 
 // ---- Mesas / salones ----
 export function addSalon(n) {
   const s = readState()
-  s.salons.push({ id: uid(), name: n })
+  const salon = { id: uid(), name: n, updatedAt: nowISO() }
+  s.salons.push(salon)
   writeState(s)
+  syncBg(() => syncSalonToSupabase(salon))
   return s
 }
 export function updateSalon(id, patch) {
   const s = readState()
   const i = s.salons.findIndex((x) => x.id === id)
-  if (i >= 0) s.salons[i] = { ...s.salons[i], ...patch }
+  if (i >= 0) s.salons[i] = { ...s.salons[i], ...patch, updatedAt: nowISO() }
   writeState(s)
+  if (i >= 0) syncBg(() => syncSalonToSupabase(s.salons[i]))
   return s
 }
 export function deleteSalon(id) {
@@ -609,32 +757,38 @@ export function deleteSalon(id) {
   s.salons = s.salons.filter((x) => x.id !== id)
   s.tables = s.tables.filter((t) => t.salonId !== id)
   writeState(s)
+  syncBg(() => deleteSalonFromSupabase(id))
   return s
 }
 export function addTable({ salonId, name, capacity }) {
   const s = readState()
-  s.tables.push({ id: uid(), salonId, name, capacity: Number(capacity) || 4, status: 'libre', orderId: null })
+  const t = { id: uid(), salonId, name, capacity: Number(capacity) || 4, status: 'libre', orderId: null, updatedAt: nowISO() }
+  s.tables.push(t)
   writeState(s)
+  syncBg(() => syncTableToSupabase(t))
   return s
 }
 export function updateTable(id, patch) {
   const s = readState()
   const i = s.tables.findIndex((x) => x.id === id)
-  if (i >= 0) s.tables[i] = { ...s.tables[i], ...patch }
+  if (i >= 0) s.tables[i] = { ...s.tables[i], ...patch, updatedAt: nowISO() }
   writeState(s)
+  if (i >= 0) syncBg(() => syncTableToSupabase(s.tables[i]))
   return s
 }
 export function deleteTable(id) {
   const s = readState()
   s.tables = s.tables.filter((x) => x.id !== id)
   writeState(s)
+  syncBg(() => deleteTableFromSupabase(id))
   return s
 }
 export function freeTable(tableId) {
   const s = readState()
   const t = s.tables.find((x) => x.id === tableId)
-  if (t) { t.status = 'libre'; t.orderId = null }
+  if (t) { t.status = 'libre'; t.orderId = null; t.updatedAt = nowISO() }
   writeState(s)
+  if (t) syncBg(() => syncTableToSupabase(t))
   return s
 }
 export function moveTable(orderId, tableId) {
@@ -644,9 +798,12 @@ export function moveTable(orderId, tableId) {
   const old = s.tables.find((t) => t.id === o.tableId)
   if (old && old.orderId === o.id) { old.status = 'libre'; old.orderId = null }
   const nt = s.tables.find((t) => t.id === tableId)
-  if (nt) { nt.status = 'ocupada'; nt.orderId = o.id }
+  if (nt) { nt.status = 'ocupada'; nt.orderId = o.id; nt.updatedAt = nowISO() }
   o.tableId = tableId
+  o.updatedAt = nowISO()
   writeState(s)
+  syncBg(() => nt && syncTableToSupabase(nt))
+  syncBg(() => syncOrderToSupabase(o))
   return readState()
 }
 export function mergeTables(targetTableId, fromTableId) {
@@ -663,6 +820,7 @@ export function mergeTables(targetTableId, fromTableId) {
       if (targetOrder && !targetOrder.paid) {
         targetOrder.items = [...targetOrder.items, ...o.items]
         recomputeOrder(s, targetOrder)
+        targetOrder.updatedAt = nowISO()
         o.status = 'cancelado'
         o.cancelReason = 'Cuenta unida'
       }
@@ -672,8 +830,14 @@ export function mergeTables(targetTableId, fromTableId) {
     }
     from.status = 'libre'
     from.orderId = null
+    from.updatedAt = nowISO()
+    target.updatedAt = nowISO()
+    o.updatedAt = nowISO()
   }
   writeState(s)
+  syncBg(() => from && syncTableToSupabase(from))
+  syncBg(() => target && syncTableToSupabase(target))
+  syncBg(() => o && syncOrderToSupabase(o))
   return readState()
 }
 
@@ -758,21 +922,25 @@ export function closeCaja({ cashCounted, user }) {
 // ---- Clientes ----
 export function addClient(c) {
   const s = readState()
-  s.clients.push({ id: uid(), name: c.name, phone: c.phone || '', address: c.address || '', notes: c.notes || '', createdAt: nowISO() })
+  const client = { id: uid(), name: c.name, phone: c.phone || '', address: c.address || '', notes: c.notes || '', createdAt: nowISO(), updatedAt: nowISO() }
+  s.clients.push(client)
   writeState(s)
+  syncBg(() => syncClientToSupabase(client))
   return s
 }
 export function updateClient(id, patch) {
   const s = readState()
   const i = s.clients.findIndex((x) => x.id === id)
-  if (i >= 0) s.clients[i] = { ...s.clients[i], ...patch }
+  if (i >= 0) s.clients[i] = { ...s.clients[i], ...patch, updatedAt: nowISO() }
   writeState(s)
+  if (i >= 0) syncBg(() => syncClientToSupabase(s.clients[i]))
   return s
 }
 export function deleteClient(id) {
   const s = readState()
   s.clients = s.clients.filter((x) => x.id !== id)
   writeState(s)
+  syncBg(() => deleteClientFromSupabase(id))
   return s
 }
 export function findOrCreateClient({ name, phone }) {
@@ -780,72 +948,85 @@ export function findOrCreateClient({ name, phone }) {
   const clean = String(phone || '').replace(/\D/g, '')
   const existing = s.clients.find((c) => (clean && c.phone && c.phone.replace(/\D/g, '') === clean) || (String(c.name).toLowerCase() === String(name || '').trim().toLowerCase() && name))
   if (existing) return { client: existing, created: false }
-  const client = { id: uid(), name, phone: phone || '', address: '', notes: '', createdAt: nowISO() }
+  const client = { id: uid(), name, phone: phone || '', address: '', notes: '', createdAt: nowISO(), updatedAt: nowISO() }
   s.clients.push(client)
   writeState(s)
+  syncBg(() => syncClientToSupabase(client))
   return { client, created: true }
 }
 
 // ---- Cupones ----
 export function addCoupon(c) {
   const s = readState()
-  s.coupons.push({ id: uid(), code: String(c.code || '').toUpperCase(), name: c.name || '', type: c.type || 'percent', value: Number(c.value) || 0, minPurchase: Number(c.minPurchase) || 0, start: c.start || null, end: c.end || null, maxUses: Number(c.maxUses) || 0, usedCount: 0, clientId: c.clientId || null, categoryIds: c.categoryIds || [], productIds: c.productIds || [], active: c.active !== false })
+  const coupon = { id: uid(), code: String(c.code || '').toUpperCase(), name: c.name || '', type: c.type || 'percent', value: Number(c.value) || 0, minPurchase: Number(c.minPurchase) || 0, start: c.start || null, end: c.end || null, maxUses: Number(c.maxUses) || 0, usedCount: 0, clientId: c.clientId || null, categoryIds: c.categoryIds || [], productIds: c.productIds || [], active: c.active !== false, updatedAt: nowISO() }
+  s.coupons.push(coupon)
   writeState(s)
+  syncBg(() => syncCouponToSupabase(coupon))
   return s
 }
 export function updateCoupon(id, patch) {
   const s = readState()
   const i = s.coupons.findIndex((x) => x.id === id)
-  if (i >= 0) s.coupons[i] = { ...s.coupons[i], ...patch }
+  if (i >= 0) s.coupons[i] = { ...s.coupons[i], ...patch, updatedAt: nowISO() }
   writeState(s)
+  if (i >= 0) syncBg(() => syncCouponToSupabase(s.coupons[i]))
   return s
 }
 export function deleteCoupon(id) {
   const s = readState()
   s.coupons = s.coupons.filter((x) => x.id !== id)
   writeState(s)
+  syncBg(() => deleteCouponFromSupabase(id))
   return s
 }
 
 // ---- Campañas ----
 export function addCampaign(c) {
   const s = readState()
-  s.campaigns.push({ id: uid(), name: c.name, description: c.description || '', active: c.active !== false, start: c.start || null, end: c.end || null, createdAt: nowISO() })
+  const camp = { id: uid(), name: c.name, description: c.description || '', active: c.active !== false, start: c.start || null, end: c.end || null, createdAt: nowISO(), updatedAt: nowISO() }
+  s.campaigns.push(camp)
   writeState(s)
+  syncBg(() => syncCampaignToSupabase(camp))
   return s
 }
 export function updateCampaign(id, patch) {
   const s = readState()
   const i = s.campaigns.findIndex((x) => x.id === id)
-  if (i >= 0) s.campaigns[i] = { ...s.campaigns[i], ...patch }
+  if (i >= 0) s.campaigns[i] = { ...s.campaigns[i], ...patch, updatedAt: nowISO() }
   writeState(s)
+  if (i >= 0) syncBg(() => syncCampaignToSupabase(s.campaigns[i]))
   return s
 }
 export function deleteCampaign(id) {
   const s = readState()
   s.campaigns = s.campaigns.filter((x) => x.id !== id)
   writeState(s)
+  syncBg(() => deleteCampaignFromSupabase(id))
   return s
 }
 
 // ---- Repartidores ----
 export function addRider(r) {
   const s = readState()
-  s.riders.push({ id: uid(), name: r.name, phone: r.phone || '', status: 'disponible', currentOrderId: null, deliveriesCount: 0, active: r.active !== false })
+  const rider = { id: uid(), name: r.name, phone: r.phone || '', status: 'disponible', currentOrderId: null, deliveriesCount: 0, active: r.active !== false, updatedAt: nowISO() }
+  s.riders.push(rider)
   writeState(s)
+  syncBg(() => syncRiderToSupabase(rider))
   return s
 }
 export function updateRider(id, patch) {
   const s = readState()
   const i = s.riders.findIndex((x) => x.id === id)
-  if (i >= 0) s.riders[i] = { ...s.riders[i], ...patch }
+  if (i >= 0) s.riders[i] = { ...s.riders[i], ...patch, updatedAt: nowISO() }
   writeState(s)
+  if (i >= 0) syncBg(() => syncRiderToSupabase(s.riders[i]))
   return s
 }
 export function deleteRider(id) {
   const s = readState()
   s.riders = s.riders.filter((x) => x.id !== id)
   writeState(s)
+  syncBg(() => deleteRiderFromSupabase(id))
   return s
 }
 

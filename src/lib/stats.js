@@ -45,10 +45,13 @@ export function todayStats(s = readState()) {
 
 export function salesByHour(s = readState(), dateKey = todayKey()) {
   const hours = []
-  for (let h = 8; h <= 23; h++) {
+  // 7am–23pm cubre desayuno/comedor y cierre; antes de las 7 no hay ventas típicas
+  for (let h = 7; h <= 23; h++) {
     const key = `${dateKey}T${String(h).padStart(2, '0')}:`
     const sales = s.orders.filter((o) => o.paid && o.paidAt && o.paidAt.startsWith(key))
-    hours.push({ hour: `${h}:00`, label: `${h}am`.replace('12am', '12pm').replace(/^(\d+)am$/, (_, n) => (n >= 12 ? `${n}pm` : `${n}am`)), value: sum(sales, (o) => o.total) })
+    const label = `${h}:00`.replace('07:00', '7a').replace('12:00', '12p')
+      .replace(/^(\d+):00$/, (_, n) => (n >= 13 ? `${n - 12}p` : `${n}a`))
+    hours.push({ hour: `${h}:00`, label, value: sum(sales, (o) => o.total) })
   }
   return hours
 }

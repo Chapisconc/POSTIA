@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { User, Phone, X } from 'lucide-react'
-import { cn } from '../../lib/cn'
+import { User, X } from 'lucide-react'
+
 
 export default function ClientSelect({ value, phone, onNameChange, onPhoneChange, clients, onSelect, onNewClient }) {
   const [open, setOpen] = useState(false)

@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback, createPortal } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Card, Button, Badge, Input, ConfirmDialog, Modal, StatCard } from '../ui'
 import { fmtMoney, fmtDateTime, fmtDuration, fmtTime, fmtAgo } from '../../lib/format'
-import { Store, Truck, Table2, Search, RefreshCw, Banknote, Clock, Printer, Eye, X, Plus, AlertTriangle, CheckCircle2, CircleDot, ArrowLeft, ChevronDown, Pencil, Trash2, Armchair, Receipt, CreditCard, Move, Merge, CirclePlus, XCircle } from 'lucide-react'
-import { ORDER_STATUS_LABEL, SERVICE_LABEL, setOrderStatus, payOrder, cancelOrder, addSalon, updateSalon, deleteSalon, addTable, updateTable, deleteTable, freeTable, moveTable, mergeTables } from '../../lib/storage'
+import { Store, Truck, Table2, Search, RefreshCw, Banknote, Clock, Printer, Eye, X, Plus, AlertTriangle, CheckCircle2, CircleDot, ArrowLeft, ChevronDown, Pencil, Trash2, Armchair, Receipt, CreditCard, Move, Merge, CirclePlus, XCircle, Lock } from 'lucide-react'
+import { ORDER_STATUS_LABEL, SERVICE_LABEL, setOrderStatus, payOrder, cancelOrder, addSalon, updateSalon, deleteSalon, addTable, updateTable, deleteTable, freeTable, moveTable, mergeTables, authorizeSupervisor, ORDER_TRANSITIONS, isOrderLocked } from '../../lib/storage'
 import { toastOk, toastErr, toastWarn } from '../../lib/notify'
 import OrderDrawer from './OrderDrawer'
 import PrintMenu from './PrintMenu'
 import PaymentDialog from '../shared/PaymentDialog'
+import CancelOrderDialog from '../shared/CancelOrderDialog'
 
 const SERVICE_TABS = [
   { key: 'mostrador', label: 'Mostrador', icon: Store },
@@ -52,7 +54,7 @@ const TABLE_STATUS_LABEL = {
 }
 
 // Dropdown inline para el botón Estado
-function EstadoDropdown({ order, onClose, onSelect }) {
+function EstadoDropdown({ order, onClose, onSelect, onPrint, anchorEl }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -63,25 +65,54 @@ function EstadoDropdown({ order, onClose, onSelect }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [onClose])
 
-  const options = []
-  if (order.status === 'nuevo') {
-    options.push({ key: 'preparando', label: 'En preparación', desc: 'Enviar a cocina', icon: '🍳', tone: 'info' })
-    options.push({ key: 'cancelado', label: 'Cancelar', desc: 'Cancelar pedido', icon: '❌', tone: 'danger' })
-  } else if (order.status === 'preparando') {
-    options.push({ key: 'listo', label: 'Entregado', desc: 'Marcar como listo', icon: '✅', tone: 'success' })
-    options.push({ key: 'porcobrar', label: 'Por cobrar', desc: 'Generar cuenta', icon: '💰', tone: 'warning' })
-    options.push({ key: 'finalizado', label: 'Finalizado', desc: 'Cerrar pedido', icon: '🎉', tone: 'success' })
-    options.push({ key: 'cancelado', label: 'Cancelar', desc: 'Cancelar pedido', icon: '❌', tone: 'danger' })
-  } else if (order.status === 'listo') {
-    options.push({ key: 'porcobrar', label: 'Por cobrar', desc: 'Generar cuenta', icon: '💰', tone: 'warning' })
-    options.push({ key: 'finalizado', label: 'Finalizado', desc: 'Cerrar pedido', icon: '🎉', tone: 'success' })
-    options.push({ key: 'cancelado', label: 'Cancelar', desc: 'Cancelar pedido', icon: '❌', tone: 'danger' })
-  } else if (order.status === 'porcobrar') {
-    options.push({ key: 'finalizado', label: 'Finalizado', desc: 'Cerrar pedido', icon: '🎉', tone: 'success' })
-    options.push({ key: 'cancelado', label: 'Cancelar', desc: 'Cancelar pedido', icon: '❌', tone: 'danger' })
-  } else {
-    options.push({ key: 'finalizado', label: 'Finalizado', desc: 'Cerrar pedido', icon: '🎉', tone: 'success' })
+  const rafRef = useRef(null)
+  const computePos = useCallback(() => {
+    if (!anchorEl) return { top: 0, left: 0 }
+    const rect = anchorEl.getBoundingClientRect()
+    const menuW = 280
+    const menuH = 280
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    const spaceRight = window.innerWidth - rect.right
+    // Abrir hacia arriba cuando hay más espacio arriba (ej. pedido abajo de la lista)
+    const openUp = spaceAbove >= spaceBelow
+    // position: fixed => coordenadas de viewport (sin scrollY/scrollX)
+    const topVal = openUp ? rect.top - menuH - 8 : rect.bottom + 8
+    const leftVal = spaceRight < menuW
+      ? Math.max(8, rect.left - menuW + rect.width)
+      : rect.right - menuW
+    return { top: topVal, left: leftVal }
+  }, [anchorEl])
+
+  const [pos, setPos] = useState(computePos)
+  useLayoutEffect(() => { setPos(computePos()) }, [computePos])
+
+  // Reposicionar al instante si la ventana cambia de tamaño o se hace scroll
+  useEffect(() => {
+    if (!anchorEl) return
+    const update = () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(() => setPos(computePos()))
+    }
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [anchorEl, computePos])
+
+  const STATUS_OPTION_META = {
+    preparando: { label: 'En preparación', desc: 'Enviar a cocina', icon: '🍳', tone: 'info' },
+    listo: { label: 'Entregado', desc: 'Marcar como listo', icon: '✅', tone: 'success' },
+    porcobrar: { label: 'Por cobrar', desc: 'Generar cuenta', icon: '💰', tone: 'warning' },
+    finalizado: { label: 'Finalizado', desc: 'Cerrar pedido', icon: '🎉', tone: 'success' },
+    cancelado: { label: 'Cancelar', desc: 'Cancelar pedido', icon: '❌', tone: 'danger' },
   }
+  const options = (ORDER_TRANSITIONS[order.status] || [])
+    .filter((s) => s !== order.status)
+    .map((s) => ({ key: s, ...STATUS_OPTION_META[s] }))
 
   const toneClasses = {
     success: 'border-success/40 bg-success/5 hover:border-success hover:bg-success/10',
@@ -96,8 +127,15 @@ function EstadoDropdown({ order, onClose, onSelect }) {
     info: 'bg-sky-400',
   }
 
-  return (
-    <div ref={ref} className="absolute right-0 top-full mt-1 z-[200] w-64 sm:w-72 bg-card border border-line rounded-xl shadow-2xl overflow-hidden">
+  return createPortal(
+    <div
+      ref={ref}
+      className="fixed z-[9999] w-64 sm:w-72 bg-card border border-line rounded-xl shadow-2xl overflow-hidden"
+      style={{
+        top: pos.top,
+        left: pos.left,
+      }}
+    >
       <div className="px-3 py-2 border-b border-line bg-page/50">
         <div className="text-[11px] font-bold text-muted uppercase tracking-wide">Cambiar estado</div>
       </div>
@@ -106,19 +144,33 @@ function EstadoDropdown({ order, onClose, onSelect }) {
           <button
             key={opt.key}
             onClick={(e) => { e.stopPropagation(); onSelect(opt.key); onClose() }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${toneClasses[opt.tone]}`}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all touch-target ${toneClasses[opt.tone]}`}
           >
             <span className={`w-2 h-2 rounded-full shrink-0 ${dotClasses[opt.tone]}`} />
             <span className="text-base shrink-0">{opt.icon}</span>
             <div className="flex-1 text-left min-w-0">
               <div className="text-sm font-semibold text-night leading-tight">{opt.label}</div>
-              <div className="text-[10px] text-muted leading-tight">{opt.desc}</div>
+              <div className="text-[11px] font-medium text-muted leading-snug">{opt.desc}</div>
             </div>
             <svg className="w-4 h-4 text-muted shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
           </button>
         ))}
+        {onPrint && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onPrint(); onClose() }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all touch-target border-line hover:bg-page"
+          >
+            <span className="w-2 h-2 rounded-full shrink-0 bg-muted" />
+            <span className="text-base shrink-0">🖨️</span>
+            <div className="flex-1 text-left min-w-0">
+              <div className="text-sm font-semibold text-night leading-tight">Imprimir</div>
+              <div className="text-[11px] font-medium text-muted leading-snug">Enviar ticket a impresora</div>
+            </div>
+          </button>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -193,14 +245,20 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
     let list = state.orders.slice().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
     list = list.filter(o => !['finalizado', 'cancelado'].includes(o.status))
 
-    if (serviceTab === 'mostrador') list = list.filter(o => o.serviceType === 'mostrador')
-    else if (serviceTab === 'domicilio') list = list.filter(o => o.serviceType === 'domicilio')
-    else if (serviceTab === 'mesa') list = list.filter(o => o.serviceType === 'mesa' && !o.tableId) // Solo mesas sin asignar
+    // Los filtros pdv_web y apps son independientes del serviceTab
+    if (statusFilter === 'pdv_web') {
+      list = list.filter(o => ['mostrador', 'domicilio', 'menudigital'].includes(o.serviceType))
+    } else if (statusFilter === 'apps') {
+      list = list.filter(o => o.serviceType === 'menudigital')
+    } else {
+      // Solo aplicar filtro de servicio cuando no es pdv_web o apps
+      if (serviceTab === 'mostrador') list = list.filter(o => o.serviceType === 'mostrador')
+      else if (serviceTab === 'domicilio') list = list.filter(o => o.serviceType === 'domicilio')
+      else if (serviceTab === 'mesa') list = list.filter(o => o.serviceType === 'mesa' && !o.tableId)
 
-    if (statusFilter === 'pendiente') list = list.filter(o => o.status === 'nuevo')
-    else if (statusFilter === 'encurso') list = list.filter(o => o.status === 'preparando')
-    else if (statusFilter === 'pdv_web') list = list.filter(o => ['mostrador', 'domicilio', 'menudigital'].includes(o.serviceType))
-    else if (statusFilter === 'apps') list = list.filter(o => o.serviceType === 'menudigital')
+      if (statusFilter === 'pendiente') list = list.filter(o => o.status === 'nuevo')
+      else if (statusFilter === 'encurso') list = list.filter(o => o.status === 'preparando')
+    }
 
     if (search.trim()) {
       const q = search.trim().toLowerCase()
@@ -222,20 +280,14 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
 
   const filterCounts = useMemo(() => {
     const base = state.orders.filter(o => !['finalizado', 'cancelado'].includes(o.status))
-    const serviceFiltered = (() => {
-      if (serviceTab === 'mostrador') return base.filter(o => o.serviceType === 'mostrador')
-      if (serviceTab === 'domicilio') return base.filter(o => o.serviceType === 'domicilio')
-      if (serviceTab === 'mesa') return base.filter(o => o.serviceType === 'mesa')
-      return base
-    })()
     return {
-      todo: serviceFiltered.length,
-      pendiente: serviceFiltered.filter(o => o.status === 'nuevo').length,
-      encurso: serviceFiltered.filter(o => o.status === 'preparando').length,
-      pdv_web: serviceFiltered.filter(o => ['mostrador', 'domicilio', 'menudigital'].includes(o.serviceType)).length,
-      apps: serviceFiltered.filter(o => o.serviceType === 'menudigital').length,
+      todo: base.length,
+      pendiente: base.filter(o => o.status === 'nuevo').length,
+      encurso: base.filter(o => o.status === 'preparando').length,
+      pdv_web: base.filter(o => ['mostrador', 'domicilio', 'menudigital'].includes(o.serviceType)).length,
+      apps: base.filter(o => o.serviceType === 'menudigital').length,
     }
-  }, [state.orders, serviceTab])
+  }, [state.orders])
 
   // Mesas
   const activeSalon = state.salons.find(s => s.id === salonId) || state.salons[0] || null
@@ -286,6 +338,16 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
     refresh()
   }
 
+  const finalizeAllPorCobrar = () => {
+    const porCobrar = state.orders.filter(o => o.status === 'porcobrar')
+    if (porCobrar.length === 0) { toastErr('No hay pedidos por cobrar'); return }
+    porCobrar.forEach(o => {
+      setOrderStatus(o.id, 'finalizado', { user })
+    })
+    toastOk(`${porCobrar.length} pedido(s) finalizado(s)`)
+    refresh()
+  }
+
   const finalizarPedido = (o) => {
     if (!o.paid) {
       setPayTarget({ ...o, _finalizarDespues: true })
@@ -297,6 +359,7 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
   }
 
   const handleEstadoSelect = (o, action) => {
+    setEstadoDropdown(null)
     if (action === 'cobrar') {
       doPay(o)
     } else if (action === 'cancelado') {
@@ -311,6 +374,7 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
   }
 
   const advanceStatus = (o) => {
+    setEstadoDropdown(null)
     const flow = { nuevo: 'preparando', preparando: 'listo' }
     const next = flow[o.status]
     if (next) {
@@ -423,7 +487,7 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
             <button
               key={tab.key}
               onClick={() => setServiceTab(tab.key)}
-              className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 rounded-lg py-1.5 sm:py-2 px-2 sm:px-3 text-[11px] sm:text-[13px] font-bold transition-all duration-300 touch-target ${
+              className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 rounded-lg py-2.5 sm:py-2 px-2 sm:px-3 text-[11px] sm:text-[13px] font-bold transition-all duration-300 touch-target ${
                 active ? 'text-white' : 'text-night'
               }`}
               style={{
@@ -433,9 +497,9 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
                   : '0 0 8px 0 rgb(var(--c-brand) / 0.06)',
               }}
             >
-              <Icon size={14} className="sm:hidden" />
+              <Icon size={15} className="sm:hidden" />
               <Icon size={16} className="hidden sm:block" />
-              <span className="hidden xs:inline sm:inline">{tab.label}</span>
+              <span>{tab.label}</span>
               <Badge tone={active ? 'white' : 'night'} className={`text-[9px] sm:text-[10px] ${active ? '!bg-white/25 !text-white font-bold' : '!bg-line !text-night font-bold'}`}>{count}</Badge>
             </button>
           )
@@ -559,7 +623,7 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
                   <button
                     key={f.key}
                     onClick={() => setStatusFilter(f.key)}
-                    className={`relative rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-[11px] sm:text-[12px] font-bold transition-all duration-300 touch-target ${
+                    className={`relative rounded-full px-3 sm:px-3.5 py-1.5 sm:py-1.5 text-[11px] sm:text-[12px] font-bold transition-all duration-300 touch-target ${
                       active ? 'text-white' : 'text-muted hover:text-night'
                     }`}
                     style={{
@@ -583,18 +647,18 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
             </div>
             <div className="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Search */}
-              <div className="flex items-center bg-card border border-line rounded-lg h-7 sm:h-8 shadow-sm focus-within:ring-2 focus-within:ring-brand/20 focus-within:border-brand transition-all overflow-hidden">
-                <div className="flex items-center gap-1 sm:gap-1.5 pl-2 sm:pl-2.5 pr-1 flex-1">
+              <div className="flex items-center bg-card border border-line rounded-lg h-8 sm:h-8 shadow-sm focus-within:ring-2 focus-within:ring-brand/20 focus-within:border-brand transition-all overflow-hidden">
+                <div className="flex items-center gap-1.5 pl-2.5 pr-1 flex-1">
                   <Search size={13} className="text-muted shrink-0" />
                   <input
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Buscar..."
-                    className="border-none outline-none bg-transparent text-[12px] sm:text-[13px] text-night placeholder:text-muted w-24 sm:w-40 focus:w-36 sm:focus:w-56 transition-all"
+                    className="border-none outline-none bg-transparent text-[12px] sm:text-[13px] text-night placeholder:text-muted w-20 sm:w-40 focus:w-36 sm:focus:w-56 transition-all"
                   />
                   {search && (
-                    <button onClick={() => setSearch('')} className="p-0.5 rounded text-muted hover:text-night hover:bg-page">
+                    <button onClick={() => setSearch('')} className="p-1 rounded text-muted hover:text-night hover:bg-page touch-icon">
                       <X size={12} />
                     </button>
                   )}
@@ -603,7 +667,7 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
                 <button
                   onClick={refreshOrders}
                   disabled={isRefreshing}
-                  className="p-1.5 text-muted hover:text-brand hover:bg-brand/5 rounded-r-lg transition-colors disabled:opacity-50"
+                  className="p-1.5 text-muted hover:text-brand hover:bg-brand/5 rounded-r-lg transition-colors disabled:opacity-50 touch-icon"
                   title="Actualizar"
                 >
                   <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
@@ -618,18 +682,27 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
               )}
               <button
                 onClick={() => onNav('pos')}
-                className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-lg bg-brand text-white font-semibold text-[12px] sm:text-[13px] hover:bg-brand-dark active:bg-brand-dark transition flex items-center gap-1 sm:gap-1.5 shrink-0"
+                className="h-8 sm:h-8 px-3 sm:px-3 rounded-lg bg-brand text-white font-semibold text-[12px] sm:text-[13px] hover:bg-brand-dark active:bg-brand-dark transition flex items-center gap-1.5 shrink-0 touch-target"
               >
                 <Plus size={16} />
                 <span>Nuevo pedido</span>
               </button>
+              {can.edit && filtered.some(o => o.status === 'porcobrar') && (
+                <button
+                  onClick={finalizeAllPorCobrar}
+                  className="h-8 sm:h-8 px-3 rounded-lg bg-gradient-to-r from-success to-success-dark text-white font-semibold text-[12px] sm:text-[13px] shadow-md shadow-success/25 hover:shadow-lg active:scale-[0.98] transition flex items-center gap-1.5 shrink-0 touch-target"
+                >
+                  <CheckCircle2 size={15} />
+                  <span>Finalizar todo</span>
+                </button>
+              )}
             </div>
           </div>
 
           {/* Orders list */}
-          <div className="flex-1 min-h-[200px] sm:min-h-[300px] flex flex-col rounded-2xl bg-card shadow-sm border border-line overflow-hidden lg:pb-0 pb-16">
-            <div className="overflow-auto flex-1 min-h-0">
-              <div className="divide-y divide-line">
+          <div className="flex-1 min-h-0 flex flex-col rounded-2xl bg-card shadow-sm border border-line lg:pb-0 pb-16">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="divide-y divide-line min-h-full">
                 {filtered.map((o) => {
                   const isLive = ['nuevo','preparando','listo','porcobrar'].includes(o.status)
                   const elapsedMs = elapsed(o.createdAt)
@@ -642,58 +715,82 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
                     <div key={o.id}
                       onClick={() => canEditOrder && onNav('pos', { orderId: o.id })}
                       className={`px-3 py-2 border-b border-line last:border-b-0 transition-colors hover:bg-page/50 ${canEditOrder ? 'cursor-pointer' : ''} ${!isLive ? 'opacity-40' : ''} relative`}>
-                      {/* Row 1: Icon + Folio + Client + Total + Timer */}
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-lg grid place-items-center shrink-0 ${o.serviceType === 'domicilio' ? 'bg-info-soft text-info-dark' : o.serviceType === 'mesa' ? 'bg-brand-soft text-brand-dark' : 'bg-page text-muted'}`}>
-                          <ServiceIcon size={12} />
-                        </div>
-                        <span className="font-mono font-bold text-night text-xs">#{o.folio}</span>
-                        <span className="text-xs text-night truncate flex-1 min-w-0">{o.client?.name || 'Sin cliente'}</span>
-                        <span className="font-mono font-bold text-night text-xs shrink-0">{fmtMoney(o.total)}</span>
-                        <span className="text-[10px] text-muted shrink-0 w-8 text-right">{fmtElapsed(elapsedMs)}</span>
-                      </div>
-                      {/* Row 2: Status + Actions */}
-                      <div className="flex items-center gap-1.5 mt-1.5 pl-9">
-                        <Badge tone={STATUS_TONE[o.status] || 'muted'} className="text-[9px]">{ORDER_STATUS_LABEL[o.status] || o.status}</Badge>
-                        <div className="flex-1" />
-                        {isPending && (
-                          <button onClick={(e) => { e.stopPropagation(); advanceStatus(o) }}
-                            className="p-1 text-success hover:bg-success-soft rounded transition" title="Aceptar">
-                            <CheckCircle2 size={13} />
-                          </button>
+                       {/* Row 1: Icon + Folio + Client + Timer */}
+                       <div className="flex items-center gap-2">
+                         <div className={`w-7 h-7 rounded-lg grid place-items-center shrink-0 ${o.serviceType === 'domicilio' ? 'bg-info-soft text-info-dark' : o.serviceType === 'mesa' ? 'bg-brand-soft text-brand-dark' : 'bg-page text-muted'}`}>
+                           <ServiceIcon size={12} />
+                         </div>
+                         <span className="font-mono font-bold text-night text-xs">#{o.folio}</span>
+                         {(() => { const lk = isOrderLocked(o, user); return lk.locked ? (
+                           <span title={`${lk.by} lo está editando`} className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400 font-medium"><Lock size={10} />{lk.by}</span>
+                         ) : null })()}
+                         <span className="text-xs text-night truncate flex-1 min-w-0">{o.client?.name || 'Sin cliente'}</span>
+                         <span className="text-[10px] text-muted shrink-0 w-8 text-right">{fmtElapsed(elapsedMs)}</span>
+                       </div>
+                       {/* Row 2: Estado a la izquierda · acciones junto al total a la derecha */}
+                       <div className="flex items-center gap-1.5 mt-1.5 pl-9">
+                         <Badge tone={STATUS_TONE[o.status] || 'muted'} className="text-[9px] sm:text-[10px]">{ORDER_STATUS_LABEL[o.status] || o.status}</Badge>
+                         <div className="flex-1" />
+                         {isPending && (
+                           <button onClick={(e) => { e.stopPropagation(); advanceStatus(o) }}
+                             title="Aceptar pedido"
+                             className="flex flex-col items-center justify-center gap-0.5 w-14 h-12 rounded-xl bg-success/15 text-success hover:bg-success/30 transition flex-shrink-0 touch-target">
+                             <CheckCircle2 size={18} />
+                             <span className="text-[10px] font-semibold leading-none">Aceptar</span>
+                           </button>
+                         )}
+                         {can.pay && !o.paid && !isPending && (
+                           <button onClick={(e) => { e.stopPropagation(); doPay(o) }}
+                             title="Cobrar pedido"
+                             className="flex flex-col items-center justify-center gap-0.5 w-14 h-12 rounded-xl bg-gold/15 text-gold hover:bg-gold/30 transition flex-shrink-0 touch-target">
+                             <Banknote size={18} />
+                             <span className="text-[10px] font-semibold leading-none">Cobrar</span>
+                           </button>
+                         )}
+                         {can.cancel && isLive && !o.paid && (
+                           <button onClick={(e) => { e.stopPropagation(); setCancelTarget(o) }}
+                             title="Cancelar pedido"
+                             className="flex flex-col items-center justify-center gap-0.5 w-14 h-12 rounded-xl bg-danger/15 text-danger hover:bg-danger/30 transition flex-shrink-0 touch-target">
+                             <XCircle size={18} />
+                             <span className="text-[10px] font-semibold leading-none">Cancelar</span>
+                           </button>
+                         )}
+                         <div className="relative">
+                           <button onClick={(e) => {
+                             e.stopPropagation()
+                             if (estadoDropdown?.timer) clearTimeout(estadoDropdown.timer)
+                             const t = setTimeout(() => refresh(), 500)
+                             setEstadoDropdown({ id: o.id, el: e.currentTarget, timer: t })
+                           }}
+                             title="Más acciones"
+                             className="flex flex-col items-center justify-center gap-0.5 w-14 h-12 rounded-xl bg-brand/15 text-brand hover:bg-brand/30 transition flex-shrink-0 touch-target">
+                             <CircleDot size={18} />
+                             <span className="text-[10px] font-semibold leading-none">Más</span>
+                           </button>
+                         </div>
+                          <div className="ml-2 w-24 shrink-0 text-right">
+                            <div className="text-[9px] uppercase tracking-wide text-muted font-bold leading-none">Total</div>
+                            <div className="text-base font-mono font-extrabold text-night leading-tight tabular-nums truncate">{fmtMoney(o.total)}</div>
+                          </div>
+                       </div>
+                        {estadoDropdown?.id === o.id && (
+                            <EstadoDropdown order={o} onClose={() => {
+                              if (estadoDropdown?.timer) clearTimeout(estadoDropdown.timer)
+                              setEstadoDropdown(null)
+                            }}
+                              onSelect={(action) => handleEstadoSelect(o, action)}
+                              anchorEl={estadoDropdown.el}
+                              onPrint={can.print ? () => {
+                                if (estadoDropdown?.timer) clearTimeout(estadoDropdown.timer)
+                                setEstadoDropdown(null)
+                                setPrintMenuId(o.id)
+                              } : null} />
                         )}
-                        {can.pay && !o.paid && !isPending && (
-                          <button onClick={(e) => { e.stopPropagation(); doPay(o) }}
-                            className="p-1 text-gold hover:bg-gold-soft rounded transition" title="Cobrar">
-                            <Banknote size={13} />
-                          </button>
-                        )}
-                        {can.cancel && isLive && !o.paid && (
-                          <button onClick={(e) => { e.stopPropagation(); setCancelTarget(o) }}
-                            className="p-1 text-danger hover:bg-danger-soft rounded transition" title="Cancelar">
-                            <XCircle size={13} />
-                          </button>
-                        )}
-                        <button onClick={(e) => { e.stopPropagation(); setEstadoDropdown(estadoDropdown === o.id ? null : o.id) }}
-                          className="p-1 text-brand hover:bg-brand-soft rounded transition" title="Estado">
-                          <CircleDot size={13} />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); setPrintMenuId(o.id) }} disabled={!can.print}
-                          className="p-1 text-muted hover:bg-page rounded transition disabled:opacity-30" title="Imprimir">
-                          <Printer size={13} />
-                        </button>
-                      </div>
-                      {estadoDropdown === o.id && (
-                        <div className="absolute right-2 top-full mt-1 z-[200]">
-                          <EstadoDropdown order={o} onClose={() => setEstadoDropdown(null)}
-                            onSelect={(action) => handleEstadoSelect(o, action)} />
-                        </div>
-                      )}
                     </div>
                   )
                 })}
                 {filtered.length === 0 && (
-                  <div className="px-6 py-20 text-center">
+                  <div className="flex flex-col items-center justify-center min-h-full px-6 py-16">
                     <div className="text-4xl mb-3">📋</div>
                     <div className="text-base font-semibold text-night mb-1">Sin pedidos en esta sección</div>
                     <div className="text-sm text-muted">Crea un nuevo pedido para comenzar</div>
@@ -710,7 +807,7 @@ export default function Pedidos({ state, refresh, onNav, params, user }) {
       {/* Order detail */}
       <OrderDrawer order={state.orders.find((x) => x.id === selectedId) || null} state={state} user={user} refresh={refresh} open={!!selectedId} onClose={() => setSelectedId(null)} onPay={setPayTarget} onCancel={(o) => setCancelTarget(o)} canEdit={can.edit} canPay={can.pay} canPrint={can.print} />
       <PaymentDialog order={payTarget} open={!!payTarget} onClose={() => setPayTarget(null)} onPay={confirmPay} />
-      <ConfirmDialog open={!!cancelTarget} title="Cancelar pedido" message={`¿Seguro que deseas cancelar el pedido #${cancelTarget?.folio}?`} confirmLabel="Cancelar pedido" danger onConfirm={confirmCancel} onCancel={() => setCancelTarget(null)} />
+      <CancelOrderDialog open={!!cancelTarget} order={cancelTarget} onClose={() => setCancelTarget(null)} onConfirm={(reason) => cancelOrder(cancelTarget.id, { reason, user })} />
       <PrintMenu order={state.orders.find((x) => x.id === printMenuId) || null} state={state} open={!!printMenuId} onClose={() => setPrintMenuId(null)} />
 
       {/* Table detail modal */}

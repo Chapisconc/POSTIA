@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { X, ChevronsLeft, ChevronsRight, Receipt, ChefHat, Package, Tags, Users, Banknote, BarChart3, Palette, Settings, History, Layers, Menu, QrCode, Home } from 'lucide-react'
+import { X, ChevronsLeft, ChevronsRight, Receipt, ChefHat, Package, Tags, Users, Banknote, BarChart3, History, Layers, Menu, QrCode, Home } from 'lucide-react'
 
 export const GROUPS = [
   { label: 'Operación', items: [
@@ -51,7 +51,7 @@ const SidebarNav = React.memo(function SidebarNav({ groups, tab, onNav, collapse
         title={collapsed ? 'Inicio' : undefined}
         aria-current={tab === 'inicio' ? 'page' : undefined}
         className={cn(
-          'group relative w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 mb-1',
+          'group relative w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 mb-1',
           collapsed && 'justify-center px-2',
           tab === 'inicio'
             ? 'bg-brand text-white shadow-md shadow-brand/20'
@@ -85,7 +85,7 @@ const SidebarNav = React.memo(function SidebarNav({ groups, tab, onNav, collapse
                   aria-current={itemActive ? 'page' : undefined}
                   role="listitem"
                   className={cn(
-                    'group relative w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium transition-all duration-200 touch-target',
+                    'group relative w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 touch-target',
                     collapsed && 'justify-center px-2',
                     itemActive
                       ? 'bg-brand/20 text-white'
@@ -119,14 +119,14 @@ const CajaStatus = React.memo(function CajaStatus({ cajaAbierta, collapsed, onNa
         onClick={onNavigateTo}
         title={collapsed ? (cajaAbierta ? 'Caja abierta' : 'Caja cerrada') : undefined}
         className={cn(
-          'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] transition-all duration-200 touch-target',
+          'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 touch-target',
           collapsed && 'justify-center',
           'text-white/60 hover:text-white hover:bg-white/6'
         )}
       >
         <span className="relative flex h-2.5 w-2.5 shrink-0">
-          <span className={cn('animate-ping absolute inline-flex h-full w-full rounded-full opacity-75', cajaAbierta ? 'bg-emerald-400' : 'bg-red-400')} />
-          <span className={cn('relative inline-flex rounded-full h-2.5 w-2.5', cajaAbierta ? 'bg-emerald-400' : 'bg-red-500')} />
+          <span className={cn('animate-ping absolute inline-flex h-full w-full rounded-full opacity-75', cajaAbierta ? 'bg-success' : 'bg-danger')} />
+          <span className={cn('relative inline-flex rounded-full h-2.5 w-2.5', cajaAbierta ? 'bg-success' : 'bg-danger')} />
         </span>
         {!collapsed && <span className="font-medium">{cajaAbierta ? 'Caja abierta' : 'Caja cerrada'}</span>}
       </button>
@@ -165,9 +165,9 @@ export default function Sidebar({ groups, tab, onNav, cajaAbierta, sidebarOpen, 
         aria-label="Menú de navegación"
       >
         <div className="flex items-center justify-between px-4 py-2 border-b border-white/8 h-12 shrink-0">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <span className="w-8 h-8 rounded-lg bg-brand grid place-items-center text-white text-sm font-black">P</span>
-            <span className="text-base font-extrabold text-white tracking-tight">POSTIA</span>
+            <span className="text-sm font-bold text-white tracking-tight">POSTIA</span>
           </div>
           <button
             className="text-white/50 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition touch-icon"
@@ -200,10 +200,10 @@ export default function Sidebar({ groups, tab, onNav, cajaAbierta, sidebarOpen, 
       >
         <div className={cn('flex items-center border-b border-white/8 h-12 shrink-0', collapsed ? 'justify-center px-2' : 'px-4')}>
           {!collapsed ? (
-            <div className="flex items-center gap-2.5 w-full">
+            <div className="flex items-center gap-2 w-full">
               <span className="w-8 h-8 rounded-lg bg-white/10 grid place-items-center text-xs font-bold text-white uppercase shrink-0">{user?.name?.[0] || 'U'}</span>
               <div className="min-w-0">
-                <div className="text-[13px] font-medium text-white truncate">{user?.name || 'Usuario'}</div>
+                <div className="text-sm font-medium text-white truncate">{user?.name || 'Usuario'}</div>
                 <div className="text-[10px] text-white/60 capitalize">{user?.role || 'admin'}</div>
               </div>
             </div>

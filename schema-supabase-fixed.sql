@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS riders (
 CREATE TABLE IF NOT EXISTS orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   folio INTEGER NOT NULL,
+  folio_date DATE NOT NULL DEFAULT CURRENT_DATE,
   service_type TEXT NOT NULL DEFAULT 'mostrador',
   table_id UUID,
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
@@ -215,6 +216,46 @@ CREATE TABLE IF NOT EXISTS rules (
   then_action TEXT NOT NULL DEFAULT 'notify',
   target TEXT,
   active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS coupons (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'porcentaje',
+  value NUMERIC NOT NULL DEFAULT 0,
+  min_purchase NUMERIC NOT NULL DEFAULT 0,
+  max_uses INTEGER NOT NULL DEFAULT 0,
+  used_count INTEGER NOT NULL DEFAULT 0,
+  start TIMESTAMPTZ,
+  "end" TIMESTAMPTZ,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
+  category_ids JSONB DEFAULT '[]',
+  product_ids JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  description TEXT,
+  start TIMESTAMPTZ,
+  "end" TIMESTAMPTZ,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS menu_digital (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  mode TEXT NOT NULL DEFAULT 'auto',
+  services JSONB DEFAULT '[]',
+  accent TEXT DEFAULT '#16A34A',
+  welcome TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -360,7 +401,7 @@ END $$;
 -- 4. ÍNDICES (crear si no existen)
 -- ============================================================
 
-CREATE UNIQUE INDEX IF NOT EXISTS orders_folio_idx ON orders(folio);
+CREATE UNIQUE INDEX IF NOT EXISTS orders_folio_idx ON orders(folio_date, folio);
 CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);
 CREATE INDEX IF NOT EXISTS orders_updated_at_idx ON orders(updated_at);
 
@@ -439,6 +480,15 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'rules' AND policyname = 'anon_all') THEN
     CREATE POLICY "anon_all" ON rules FOR ALL USING (true) WITH CHECK (true);
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'coupons' AND policyname = 'anon_all') THEN
+    CREATE POLICY "anon_all" ON coupons FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'campaigns' AND policyname = 'anon_all') THEN
+    CREATE POLICY "anon_all" ON campaigns FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'menu_digital' AND policyname = 'anon_all') THEN
+    CREATE POLICY "anon_all" ON menu_digital FOR ALL USING (true) WITH CHECK (true);
+  END IF;
 END $$;
 
 -- ============================================================
@@ -453,13 +503,13 @@ ON CONFLICT (id) DO NOTHING;
 -- 7. FUNCIONES RPC
 -- ============================================================
 
-CREATE OR REPLACE FUNCTION get_next_folio()
+CREATE OR REPLACE FUNCTION get_next_folio(p_date DATE DEFAULT CURRENT_DATE)
 RETURNS INTEGER AS $$
 DECLARE
   f INTEGER;
 BEGIN
   LOCK TABLE orders IN EXCLUSIVE MODE;
-  SELECT COALESCE(MAX(folio), 0) + 1 INTO f FROM orders;
+  SELECT COALESCE(MAX(folio), 0) + 1 INTO f FROM orders WHERE folio_date = p_date;
   RETURN f;
 END;
 $$ LANGUAGE plpgsql;
@@ -494,17 +544,70 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION release_order_lock(p_order_id UUID)
+CREATE OR REPLACE FUNCTION acquire_order_lock(p_order_id UUID, p_machine_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_locked UUID;
+  v_locked_at TIMESTAMPTZ;
+  v_now TIMESTAMPTZ := NOW();
+  v_updated INT;
+BEGIN
+  SELECT locked_by, locked_at INTO v_locked, v_locked_at
+  FROM orders WHERE id = p_order_id;
+
+  -- Lock expired or stale
+  IF v_locked IS NOT NULL AND v_locked_at < v_now - INTERVAL '5 minutes' THEN
+    v_locked := NULL;
+  END IF;
+
+  -- Already owned by this machine
+  IF v_locked = p_machine_id THEN
+    UPDATE orders SET locked_at = v_now WHERE id = p_order_id;
+    RETURN TRUE;
+  END IF;
+
+  -- Locked by someone else
+  IF v_locked IS NOT NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  -- Try to acquire atomically
+  UPDATE orders SET locked_by = p_machine_id, locked_at = v_now
+  WHERE id = p_order_id AND locked_by IS NULL;
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  RETURN v_updated > 0;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION release_order_lock(p_order_id UUID, p_machine_id UUID)
 RETURNS VOID AS $$
 BEGIN
   UPDATE orders SET locked_by = NULL, locked_at = NULL
-  WHERE id = p_order_id;
+  WHERE id = p_order_id AND locked_by = p_machine_id;
 END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================
 -- 8. NOTA REALTIME
 -- ============================================================
--- Ejecutar solo una vez:
--- PUBLICATION supabase_realtime ADD TABLE orders;
--- (o desde Dashboard > Replication > orders)
+-- La publicación supabase_realtime debe incluir todas las tablas que se
+-- sincronizan entre pantallas/dispositivos. Ejecutar una vez (idempotente):
+DROP PUBLICATION IF EXISTS supabase_realtime;
+CREATE PUBLICATION supabase_realtime FOR TABLE orders, products, categories, tables, clients, riders, users, mod_groups, salons, campaigns, coupons, menu_digital, settings WITH (publish = 'insert, update, delete');
+-- REPLICA IDENTITY FULL: requerido para que Supabase Realtime entregue el
+-- registro completo (new) en los eventos postgres_changes. Sin esto, el canal
+-- se suscribe (SUBSCRIBED) pero los eventos no llegan al cliente.
+ALTER TABLE orders REPLICA IDENTITY FULL;
+ALTER TABLE products REPLICA IDENTITY FULL;
+ALTER TABLE categories REPLICA IDENTITY FULL;
+ALTER TABLE tables REPLICA IDENTITY FULL;
+ALTER TABLE clients REPLICA IDENTITY FULL;
+ALTER TABLE riders REPLICA IDENTITY FULL;
+ALTER TABLE users REPLICA IDENTITY FULL;
+ALTER TABLE mod_groups REPLICA IDENTITY FULL;
+ALTER TABLE coupons REPLICA IDENTITY FULL;
+ALTER TABLE campaigns REPLICA IDENTITY FULL;
+ALTER TABLE salons REPLICA IDENTITY FULL;
+ALTER TABLE menu_digital REPLICA IDENTITY FULL;
+ALTER TABLE settings REPLICA IDENTITY FULL;
+-- (o desde Dashboard > Replication > agregar las tablas)

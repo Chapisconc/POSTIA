@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Button, Field, Input, Segmented, Modal } from '../ui'
+import { Button, Field, Input, Modal, AsyncButton } from '../ui'
 import { fmtMoney } from '../../lib/format'
 import { PAYMENT_METHODS, paymentBreakdown, getSettings } from '../../lib/storage'
 
@@ -67,9 +67,13 @@ export default function PaymentDialog({ order, open, onClose, onPay }) {
 
         <div className="flex gap-2">
           <Button variant="ghost" className="flex-1" onClick={onClose}>Cancelar</Button>
-          <Button variant="gradient" className="flex-1 !py-3 text-base" onClick={() => onPay({ payment, cashReceived: payment === 'efectivo' && cashReceived !== '' ? Number(cashReceived) : null })}>
+          <AsyncButton variant="gradient" className="flex-1 !py-3 text-base" loadingText="Cobrando…" successText="¡Cobrado!" errorText="Error — reintentar"
+            onClick={() => new Promise((resolve, reject) => {
+              try { onPay({ payment, cashReceived: payment === 'efectivo' && cashReceived !== '' ? Number(cashReceived) : null }); resolve() }
+              catch (e) { reject(e) }
+            })}>
             Cobrar {fmtMoney(payment === 'tarjeta' ? info.charge : order.total)}
-          </Button>
+          </AsyncButton>
         </div>
       </div>
     </Modal>
